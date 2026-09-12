@@ -1,0 +1,67 @@
+<header class="topbar">
+  <span class="logo">PackProof</span>
+  <button class="link-button" (click)="logout()">Log out</button>
+</header>
+
+<main>
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (!company()) {
+    <div class="onboarding-card">
+      <h1>Set up your company</h1>
+      <p class="muted">One last step before you can invite suppliers.</p>
+
+      <form (ngSubmit)="createCompany()">
+        <label>
+          Company name
+          <input type="text" name="companyName" [(ngModel)]="companyName" required />
+        </label>
+
+        <label>
+          Country
+          <input
+            type="text"
+            name="companyCountry"
+            [(ngModel)]="companyCountry"
+            required
+            maxlength="2"
+            placeholder="e.g. NL"
+          />
+        </label>
+
+        @if (errorMessage()) {
+          <p class="error">{{ errorMessage() }}</p>
+        }
+
+        <button type="submit" [disabled]="onboarding()">
+          {{ onboarding() ? 'Creating…' : 'Create company' }}
+        </button>
+      </form>
+    </div>
+  } @else {
+    <h1>{{ company()?.name }}</h1>
+
+    <section class="summary">
+      <div class="stat">
+        <span class="stat-value">0</span>
+        <span class="stat-label">Products</span>
+      </div>
+      <div class="stat">
+        <span class="status-badge status-green">0 Complete</span>
+      </div>
+      <div class="stat">
+        <span class="status-badge status-orange">0 Missing information</span>
+      </div>
+      <div class="stat">
+        <span class="status-badge status-red">0 Review required</span>
+      </div>
+    </section>
+
+    <section class="empty-state">
+      <p class="muted">
+        No suppliers yet. Adding products and suppliers is coming in the next iteration of
+        PackProof.
+      </p>
+    </section>
+  }
+</main>

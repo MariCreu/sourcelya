@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: packproof
+      POSTGRES_PASSWORD: packproof
+      POSTGRES_DB: packproof
+    ports:
+      - "5432:5432"
+    volumes:
+      - packproof_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U packproof"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://packproof:packproof@postgres:5432/packproof
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    command: >
+      sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+
+volumes:
+  packproof_postgres_data:
