@@ -1,5 +1,6 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { AnalyticsService } from '../../core/analytics.service';
 import { BackendApiService } from '../../core/services/backend-api.service';
 import { Supplier } from '../../core/services/supplier.models';
 import { TopNavComponent } from '../../shared/top-nav/top-nav.component';
@@ -13,6 +14,7 @@ import { TopNavComponent } from '../../shared/top-nav/top-nav.component';
 })
 export class SuppliersComponent implements OnInit {
   private readonly api = inject(BackendApiService);
+  private readonly analytics = inject(AnalyticsService);
 
   loading = signal(true);
   suppliers = signal<Supplier[]>([]);
@@ -54,6 +56,7 @@ export class SuppliersComponent implements OnInit {
       .subscribe({
         next: (supplier) => {
           this.suppliers.update((current) => [...current, supplier]);
+          this.analytics.track('supplier_added');
           this.name = '';
           this.email = '';
           this.country = '';

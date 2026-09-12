@@ -167,23 +167,62 @@ that's the point to add denormalization or a materialized view — not before.
 ### Domains
 
 The public target is **https://sourcelya.com**. Nothing needs deploying or
-pointing at DNS yet, but the codebase is already laid out so the app can
-later split across subdomains without a rewrite:
+pointing at DNS yet, but the repository is already laid out as three
+independently deployable units, one per subdomain:
 
-- `sourcelya.com` — marketing/landing (today: the `/` route inside the same
-  Angular app as everything else — `LandingComponent`, no auth required).
-- `app.sourcelya.com` — the authenticated application (today: `/login`,
-  `/signup`, `/dashboard` in that same Angular app).
-- `api.sourcelya.com` — the FastAPI backend (already a separate deployable
-  unit — see `backend/`).
+- **`sourcelya.com`** — public marketing/SEO site. `web/`: plain static
+  HTML/CSS/JS, no build step, no auth. See `web/README.md` for why this is
+  a separate static site rather than an Angular route (short version:
+  indexability and performance beat the convenience of one codebase for a
+  handful of marketing pages).
+- **`app.sourcelya.com`** — the authenticated application. `frontend/`: the
+  Angular SPA (`/login`, `/signup`, `/dashboard`, `/suppliers`,
+  `/products`). Its `/` route just redirects to `/login` — it has no
+  marketing content of its own anymore, to avoid two different landing
+  pages for the same product living on two domains.
+- **`api.sourcelya.com`** — the FastAPI backend, already a separate
+  deployable unit (`backend/`).
 
-Because the landing and the authenticated app are already separate routes/
-components with no shared state beyond `BRAND` and routing, splitting them
-into two Angular projects (or two static deployments) later is a build/
-deploy change, not a rewrite. `FRONTEND_BASE_URL` (backend CORS) and
-`apiBaseUrl` (frontend, `environment.production.ts`) are the two settings
-that would need to point at the new subdomains — see
-[Environment variables](#environment-variables).
+`FRONTEND_BASE_URL` (backend CORS) and `apiBaseUrl`
+(`frontend/src/environments/environment.production.ts`) are the two
+settings that would need to point at the real subdomains once this is
+actually deployed — see [Environment variables](#environment-variables).
+
+## Public landing site (sourcelya.com)
+
+`web/` is a small, hand-written static site: one page (six sections — hero,
+problem, how it works, who it's for, PPWR-as-first-focus with the legal
+disclaimer, final CTA), `robots.txt`, `sitemap.xml`, and an analytics
+abstraction with no provider wired up yet. No build step, no framework — see
+[Why not an in-process scheduler](#why-not-an-in-process-scheduler-for-jobs)
+for the general pattern of "ship the simple thing now, the complex thing
+if/when it's actually needed" that also applies here; `web/README.md`
+covers the specific SSR-vs-static tradeoff in more depth.
+
+Measured locally with Lighthouse against the static file server (Chromium,
+headless, mobile-equivalent throttling as configured by Lighthouse's
+defaults):
+
+| Category | Score |
+| --- | --- |
+| Performance | 100 |
+| Accessibility | 100 |
+| Best Practices | 100 |
+| SEO | 100 |
+
+First Contentful Paint / Largest Contentful Paint / Speed Index all ~1.0s
+locally, Total Blocking Time 0ms, Cumulative Layout Shift 0 — expected for a
+page with no JS framework, no web fonts, and no render-blocking requests
+beyond one small stylesheet. Run it yourself:
+
+```bash
+npx serve web -l 5050 &
+npx lighthouse http://localhost:5050/ --view
+```
+
+Future regulation-specific pages (`/ppwr`, `/ppwr/importers`, `/guides/...`,
+`/dpp/...`) are deliberately not built yet — see `web/README.md` for the
+directory convention they'd follow when they are.
 
 ## Data model
 
@@ -381,7 +420,13 @@ part of `0001_initial_schema.py`), so there is still only one migration.
 ## Project structure
 
 ```
-backend/
+web/                # sourcelya.com — public static site (see web/README.md)
+  index.html
+  styles.css
+  analytics.js
+  robots.txt
+  sitemap.xml
+backend/            # api.sourcelya.com
   app/
     api/            # FastAPI routers + dependencies (auth, DB session)
     core/           # config, database, security (JWT), logging
@@ -393,11 +438,11 @@ backend/
     integrations/   # email / storage / extraction adapters behind interfaces
   alembic/          # migrations
   tests/
-frontend/
+frontend/           # app.sourcelya.com — the authenticated app, no landing content
   src/app/
     core/           # auth service, HTTP interceptor, route guard, API client,
-                     # brand.ts (single source of truth for product naming/copy)
-    features/       # landing, auth (login/signup), dashboard, suppliers,
+                     # brand.ts (naming/copy), analytics.service.ts
+    features/       # auth (login/signup), dashboard, suppliers,
                      # products (+ product-detail)
     shared/         # cross-feature UI: top-nav, shared list-page styles
   src/environments/
@@ -406,6 +451,10 @@ docker-compose.yml
 ```
 
 ## Roadmap
+
+Outside the numbered phases below (a standalone validation task, done
+between FASE 2 and FASE 3): the [public landing
+site](#public-landing-site-sourcelyacom) at `sourcelya.com`.
 
 - **FASE 1 — done**: architecture, minimal database schema, Supabase JWKS
   auth, company onboarding, dashboard shell, internal-jobs endpoint shape.
