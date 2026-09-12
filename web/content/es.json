@@ -1,0 +1,92 @@
+{
+  "htmlLang": "es",
+  "meta": {
+    "title": "Sourcelya — Deja de perseguir a tus proveedores por la documentación",
+    "description": "Sourcelya solicita la información a tus proveedores, organiza los documentos que envían y te muestra automáticamente qué falta.",
+    "ogDescription": "Sourcelya solicita la información a tus proveedores, organiza los documentos que envían y te muestra automáticamente qué falta."
+  },
+  "nav": {
+    "howItWorks": "Cómo funciona",
+    "login": "Iniciar sesión",
+    "startFree": "Empieza gratis"
+  },
+  "langSwitch": {
+    "current": "ES",
+    "otherLabel": "EN",
+    "otherHref": "/en/",
+    "otherHrefLang": "en"
+  },
+  "a11y": {
+    "skipLink": "Ir al contenido"
+  },
+  "hero": {
+    "kicker": "Cumplimiento de proveedores, sin perseguir a nadie",
+    "h1": "Deja de perseguir a tus proveedores por la documentación.",
+    "subheading": "Sourcelya solicita la información a tus proveedores, organiza los documentos que envían y te muestra automáticamente qué falta.",
+    "primaryCta": "Comprueba tu primer proveedor gratis",
+    "secondaryCta": "Cómo funciona"
+  },
+  "problem": {
+    "heading": "¿La documentación de tus proveedores vive entre emails, hojas de cálculo, PDFs y carpetas?",
+    "subheading": "Sourcelya centraliza el proceso y hace el seguimiento por ti.",
+    "cards": [
+      { "icon": "✉️", "label": "Emails con proveedores" },
+      { "icon": "📊", "label": "Hojas de cálculo" },
+      { "icon": "📄", "label": "PDFs" },
+      { "icon": "❓", "label": "Información pendiente" }
+    ]
+  },
+  "howItWorks": {
+    "heading": "Cómo funciona",
+    "subheading": "Un único flujo, desde la primera solicitud hasta un registro completo y organizado.",
+    "steps": [
+      {
+        "title": "Añade tu proveedor",
+        "description": "Indica qué productos o información necesitas."
+      },
+      {
+        "title": "Sourcelya hace la solicitud",
+        "description": "Tu proveedor recibe un enlace seguro. No necesita crear una cuenta."
+      },
+      {
+        "title": "El proveedor envía la información",
+        "description": "Puede completar los datos y adjuntar documentos directamente."
+      },
+      {
+        "title": "Sourcelya te muestra qué falta",
+        "description": "Centraliza la documentación y detecta la información pendiente."
+      }
+    ]
+  },
+  "audience": {
+    "heading": "¿Para quién es Sourcelya?",
+    "cards": [
+      {
+        "title": "Importadores",
+        "description": "Traen productos o packaging desde proveedores fuera de su mercado habitual."
+      },
+      {
+        "title": "Ecommerce",
+        "description": "Gestionan un catálogo con proveedores cuya documentación vive repartida entre emails y hojas de cálculo."
+      },
+      {
+        "title": "Marcas con proveedores externos",
+        "description": "Sin un equipo de compliance dedicado, pero con obligaciones reales de conservar evidencias."
+      }
+    ]
+  },
+  "regulatory": {
+    "badge": "Primer foco: PPWR",
+    "heading": "Prepárate para PPWR sin perseguir proveedores por email.",
+    "body": "Las nuevas obligaciones europeas sobre envases requieren que las empresas dispongan de información cada vez más estructurada sobre sus productos y packaging. Sourcelya te ayuda a recopilar y organizar esa información desde el origen: tus proveedores.",
+    "disclaimer": "Sourcelya ayuda a recopilar y organizar documentación y no sustituye asesoramiento jurídico especializado."
+  },
+  "finalCta": {
+    "heading": "Deja que Sourcelya persiga los documentos, no tú.",
+    "subheading": "Gratis para empezar — sin tarjeta de crédito.",
+    "cta": "Comprueba tu primer proveedor gratis"
+  },
+  "footer": {
+    "loginLink": "Inicia sesión en tu cuenta"
+  }
+}

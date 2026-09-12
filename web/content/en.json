@@ -1,0 +1,92 @@
+{
+  "htmlLang": "en",
+  "meta": {
+    "title": "Sourcelya — Supplier compliance, without the chasing",
+    "description": "Sourcelya collects supplier documentation, structures the information you need and shows you what's missing.",
+    "ogDescription": "Sourcelya collects supplier documentation, structures the information you need and shows you what's missing."
+  },
+  "nav": {
+    "howItWorks": "How it works",
+    "login": "Log in",
+    "startFree": "Start free"
+  },
+  "langSwitch": {
+    "current": "EN",
+    "otherLabel": "ES",
+    "otherHref": "/es/",
+    "otherHrefLang": "es"
+  },
+  "a11y": {
+    "skipLink": "Skip to content"
+  },
+  "hero": {
+    "kicker": "Supplier compliance, without the chasing",
+    "h1": "Stop chasing suppliers for compliance documents.",
+    "subheading": "Sourcelya collects supplier documentation, structures the information you need and shows you what's missing.",
+    "primaryCta": "Check my first supplier free",
+    "secondaryCta": "See how it works"
+  },
+  "problem": {
+    "heading": "Is your supplier documentation scattered across emails, spreadsheets, PDFs and folders?",
+    "subheading": "Sourcelya centralises the process and does the follow-up for you.",
+    "cards": [
+      { "icon": "✉️", "label": "Supplier emails" },
+      { "icon": "📊", "label": "Spreadsheets" },
+      { "icon": "📄", "label": "PDFs" },
+      { "icon": "❓", "label": "Missing information" }
+    ]
+  },
+  "howItWorks": {
+    "heading": "How it works",
+    "subheading": "One workflow, from your first request to a complete, organised record.",
+    "steps": [
+      {
+        "title": "Add your supplier",
+        "description": "Tell Sourcelya which products or information you need."
+      },
+      {
+        "title": "Sourcelya requests the information",
+        "description": "Your supplier gets a secure link. No account required."
+      },
+      {
+        "title": "Your supplier uploads documents",
+        "description": "They can fill in the data and attach documents directly."
+      },
+      {
+        "title": "Sourcelya shows what's missing",
+        "description": "It centralises the documentation and flags what's still pending."
+      }
+    ]
+  },
+  "audience": {
+    "heading": "Who Sourcelya is for",
+    "cards": [
+      {
+        "title": "Importers",
+        "description": "Bringing in products or packaging from suppliers outside their home market."
+      },
+      {
+        "title": "Ecommerce sellers",
+        "description": "Managing a catalog with supplier documentation scattered across emails and spreadsheets."
+      },
+      {
+        "title": "Brands with external suppliers",
+        "description": "No dedicated compliance team, but real obligations to keep evidence for."
+      }
+    ]
+  },
+  "regulatory": {
+    "badge": "First focus: PPWR",
+    "heading": "Get ready for PPWR without chasing suppliers by email.",
+    "body": "New EU packaging obligations require companies to hold increasingly structured information about their products and packaging. Sourcelya helps you collect and organise that information at the source: your suppliers.",
+    "disclaimer": "Sourcelya helps you collect and organise documentation and does not replace specialised legal advice."
+  },
+  "finalCta": {
+    "heading": "Let Sourcelya chase the documents, not you.",
+    "subheading": "Free to start — no credit card required.",
+    "cta": "Check my first supplier free"
+  },
+  "footer": {
+    "loginLink": "Log in to your account"
+  }
+}

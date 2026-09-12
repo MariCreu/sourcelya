@@ -1,26 +1,31 @@
 /**
  * Minimal analytics abstraction for the public site.
  *
- * No provider (GA4, Plausible, PostHog, ...) is wired up yet — that's a
- * deliberate FASE-later decision, not an oversight. What matters now is a
- * single function every page calls, with a fixed, shared event taxonomy, so
- * plugging in a real provider later is a one-function change here instead of
- * a hunt through every page for ad-hoc tracking calls.
+ * No provider is wired up yet, and no cookies are set — deliberately, on
+ * both counts. What matters now is a single function every page calls,
+ * with a fixed, shared event taxonomy, so plugging in a real provider
+ * later is a one-function change here instead of a hunt through every
+ * page for ad-hoc tracking calls. When a provider is added, prefer a
+ * privacy-friendly/cookieless one (e.g. Plausible) if it covers what's
+ * needed — that keeps this MVP out of cookie-consent-banner territory for
+ * longer, not because of a regulatory reading, just because a CMP is real
+ * scope this product doesn't need yet.
  *
- * The same taxonomy is mirrored in the Angular app
- * (frontend/src/app/core/analytics.service.ts) for the events that happen
- * there instead of on this site (signup_started, signup_completed,
- * supplier_added, compliance_request_sent). Keep the two lists in sync.
+ * The full funnel this taxonomy is meant to measure, split by where each
+ * event actually fires:
+ *   - here (this site): landing_view, primary_cta_click, secondary_cta_click
+ *   - the Angular app (frontend/src/app/core/analytics.service.ts):
+ *     signup_started, signup_completed, supplier_added
+ *   - not fired anywhere yet — the features don't exist until FASE 3/4:
+ *     compliance_request_created, compliance_request_sent,
+ *     supplier_request_opened, supplier_request_submitted
+ * Keep this list and the Angular one in sync.
  */
 (function (window) {
   var EVENTS = {
     LANDING_VIEW: 'landing_view',
     PRIMARY_CTA_CLICK: 'primary_cta_click',
     SECONDARY_CTA_CLICK: 'secondary_cta_click'
-    // Fired from the Angular app, not this site — listed here so the full
-    // taxonomy lives in one place conceptually:
-    //   signup_started, signup_completed, supplier_added,
-    //   compliance_request_sent
   };
 
   function track(event, properties) {

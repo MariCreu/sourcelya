@@ -190,39 +190,86 @@ actually deployed — see [Environment variables](#environment-variables).
 
 ## Public landing site (sourcelya.com)
 
-`web/` is a small, hand-written static site: one page (six sections — hero,
-problem, how it works, who it's for, PPWR-as-first-focus with the legal
-disclaimer, final CTA), `robots.txt`, `sitemap.xml`, and an analytics
-abstraction with no provider wired up yet. No build step, no framework — see
+`web/` is a small static site, in Spanish (`/es/`, default — Spain is the
+first go-to-market market) and English (`/en/`, root `/` redirects to
+`/es/`): one page per locale (six sections — hero, problem, how it works,
+who it's for, PPWR-as-first-focus with the legal disclaimer, final CTA),
+`robots.txt`, a bilingual `sitemap.xml` with hreflang alternates, and an
+analytics abstraction with no provider wired up yet.
+
+Content is centralized, not duplicated per page or hardcoded per component:
+`web/content/es.json` / `en.json` hold every string, `web/templates/`
+holds the (single, shared) HTML structure, and `web/build.js` — about 100
+lines, zero npm dependencies — renders one into the other. See
 [Why not an in-process scheduler](#why-not-an-in-process-scheduler-for-jobs)
 for the general pattern of "ship the simple thing now, the complex thing
-if/when it's actually needed" that also applies here; `web/README.md`
-covers the specific SSR-vs-static tradeoff in more depth.
+if/when it's actually needed" that also applies here (no framework, no
+build pipeline beyond that one script); `web/README.md` covers the
+SSR-vs-static tradeoff and the i18n approach in full.
 
 Measured locally with Lighthouse against the static file server (Chromium,
 headless, mobile-equivalent throttling as configured by Lighthouse's
-defaults):
+defaults) — same scores on both locales:
 
-| Category | Score |
-| --- | --- |
-| Performance | 100 |
-| Accessibility | 100 |
-| Best Practices | 100 |
-| SEO | 100 |
+| Category | `/es/` | `/en/` |
+| --- | --- | --- |
+| Performance | 100 | 100 |
+| Accessibility | 100 | 100 |
+| Best Practices | 100 | 100 |
+| SEO | 100 | 100 |
 
-First Contentful Paint / Largest Contentful Paint / Speed Index all ~1.0s
-locally, Total Blocking Time 0ms, Cumulative Layout Shift 0 — expected for a
-page with no JS framework, no web fonts, and no render-blocking requests
-beyond one small stylesheet. Run it yourself:
+Expected for a page with no JS framework, no web fonts, and no
+render-blocking requests beyond one small stylesheet. Run it yourself:
 
 ```bash
-npx serve web -l 5050 &
-npx lighthouse http://localhost:5050/ --view
+cd web && npm run build && npx serve . -l 5050 &
+npx lighthouse http://localhost:5050/es/ --view
 ```
 
-Future regulation-specific pages (`/ppwr`, `/ppwr/importers`, `/guides/...`,
-`/dpp/...`) are deliberately not built yet — see `web/README.md` for the
-directory convention they'd follow when they are.
+Future regulation-specific pages (`/es/ppwr`, `/en/ppwr/importers`,
+`/es/guias/...`, `/en/dpp/...`) are deliberately not built yet — see
+`web/README.md` for the directory convention they'd follow when they are.
+
+### App i18n: what's built vs. deliberately deferred
+
+The brief also asks for `app.sourcelya.com` (the Angular app) to be
+"prepared" for ES/EN, plus a `requestLanguage`-type concept on
+`ComplianceRequest`. Two different calls were made here, and it's worth
+being explicit about why:
+
+- **Built**: `Locale` (`app/domain/enums.py`, backend) — an `es`/`en` enum
+  reserved for `ComplianceRequest.language` once that table exists (FASE 3)
+  and for the app's own future locale switching. One shared type for both,
+  since they're the same concept. Costs nothing to have now (no table, no
+  migration) and saves inventing one later under time pressure.
+- **Deliberately not built**: an actual i18n library/service wired into the
+  existing Angular screens (login, signup, dashboard, suppliers, products).
+  Retrofitting `@angular/localize` or similar — extracting every hardcoded
+  string across five components, deciding a per-locale build strategy —
+  is real work for close to zero validation value right now: those screens
+  aren't what a first Spanish customer sees (the landing site is, and it's
+  already bilingual), and they're still changing shape fast enough that
+  translating them today means re-translating them again soon. The brief
+  itself only requires that **new** screens avoid hardcoded strings, not
+  that existing ones get retrofitted — there is no new screen in this task
+  to apply that to (the CTA already points straight at the existing
+  `/signup`, deliberately — see the next section). When the app's first
+  genuinely customer-facing screen is built, it should follow the same
+  centralization pattern already proven twice (`BRAND`, the landing site's
+  `content/*.json`) — a small dictionary + a service — rather than a
+  library pulled in for its own sake.
+
+### The CTA and the PPWR checker
+
+"Check my first supplier free" / "Comprueba tu primer proveedor gratis"
+links straight to `https://app.sourcelya.com/signup`, which already exists
+and works (FASE 1). That satisfies the brief's own instruction to pick
+"the simplest option that doesn't block launch" — building a placeholder
+screen instead of using the signup that's already there would have been
+extra work for the same outcome. When a real PPWR/Supplier Readiness
+Checker exists, the destination changes in exactly one place —
+`APP_SIGNUP_URL` in `web/build.js` — not in the template's five separate
+links or in two locale files.
 
 ## Data model
 
@@ -280,6 +327,7 @@ ones:
 | `REMINDER_SCHEDULE_DAYS` | Centralized reminder cadence — never hardcode this elsewhere |
 | `RESEND_API_KEY` | Leave empty locally: emails are logged instead of sent |
 | `DOCUMENT_EXTRACTION_PROVIDER` | `stub` today; a real provider plugs in behind `DocumentExtractionService` |
+| `INTEGRATION_DATABASE_URL` | Optional override for `pytest -m integration`; defaults to the `docker-compose.yml` Postgres credentials |
 
 If you don't have a Supabase project yet, set `SUPABASE_JWT_STRATEGY=hs256`
 and `SUPABASE_JWT_SECRET` to any value locally — the frontend won't be able
@@ -360,15 +408,26 @@ npm start   # ng serve, http://localhost:4200
 
 ## Tests
 
+Two suites, run separately on purpose — see `backend/tests/integration/README.md`
+for the full reasoning:
+
 ```bash
 cd backend
 source .venv/bin/activate
-pytest
+pytest                 # fast suite: SQLite, no external services, runs on every save
+
+docker compose up -d postgres    # or any reachable Postgres with matching creds
+pytest -m integration  # slow suite: real PostgreSQL, catches SQLite/Postgres divergence
 ```
 
-Tests run against an in-memory SQLite database (no Postgres needed) and cover
-what matters most for an MVP handling multi-tenant data behind a public
-supplier link:
+`pytest -m integration` is excluded from a plain `pytest` run (see
+`backend/pytest.ini`) and skips itself with an explanatory message if
+Postgres isn't reachable, rather than failing the whole run.
+
+### Fast suite (SQLite)
+
+Covers what matters most for an MVP handling multi-tenant data behind a
+public supplier link:
 
 - `test_auth.py` — the HS256 dev/test verifier: missing/garbage/expired
   tokens, wrong signing secret, wrong audience, missing subject, and that a
@@ -394,6 +453,33 @@ supplier link:
   products and packaging components, and that a product's computed status
   flips from `orange` to `green` as its packaging component's required
   fields get filled in.
+
+### Integration suite (real PostgreSQL)
+
+Not a duplicate of the fast suite — six tests for exactly the things SQLite
+can't validate:
+
+- Alembic migrations apply cleanly against real Postgres.
+- **Foreign keys are enforced.** SQLite doesn't enforce them unless `PRAGMA
+  foreign_keys=ON` is set, and the fast suite's engine doesn't set it — a
+  broken FK would pass every fast-suite run and only surface in
+  production/Supabase.
+- **`VARCHAR(n)` length limits are enforced.** SQLite has no such concept
+  and silently accepts a too-long value; Postgres correctly rejects it.
+- The custom `GUID` type round-trips correctly through the real `psycopg`
+  driver, not SQLite's fallback.
+- `users.email` uniqueness is enforced at the database level.
+- `CompanyScopedRepository` isolation holds end to end against the real
+  database, not just SQLite.
+
+Deliberately not included: a `secure_token_hash` check. That column lives
+on `ComplianceRequest`, which doesn't exist until FASE 3 — a test for a
+table that isn't built yet would be decoration, not signal.
+
+Reuses `docker-compose.yml`'s `postgres` service and credentials rather
+than standing up separate test infrastructure, and truncates the app's
+tables before each test — **don't point `INTEGRATION_DATABASE_URL` at a
+database you care about.**
 
 Frontend: `cd frontend && npm test` runs the Angular/Karma unit tests
 (requires a Chromium binary; see `frontend/README.md` if you need to point
@@ -421,23 +507,26 @@ part of `0001_initial_schema.py`), so there is still only one migration.
 
 ```
 web/                # sourcelya.com — public static site (see web/README.md)
-  index.html
-  styles.css
-  analytics.js
-  robots.txt
-  sitemap.xml
+  content/          # es.json / en.json — every string on the page, centralized
+  templates/        # page.html (shared structure), redirect.html (root ->/es/)
+  build.js          # zero-dependency generator: content + template -> es/, en/
+  es/, en/          # generated output (committed — see web/README.md)
+  index.html        # generated: root redirect to /es/
+  styles.css, analytics.js, favicon.svg, robots.txt, sitemap.xml, _redirects
 backend/            # api.sourcelya.com
   app/
     api/            # FastAPI routers + dependencies (auth, DB session)
     core/           # config, database, security (JWT), logging
     models/         # SQLAlchemy models
-    domain/         # pure-Python domain enums (not DB-mapped)
+    domain/         # pure-Python domain enums (not DB-mapped) — includes
+                     # Locale (es/en), reserved for ComplianceRequest.language
     schemas/        # Pydantic schemas
     repositories/   # DB access, company-scoped by default
     services/       # business logic
     integrations/   # email / storage / extraction adapters behind interfaces
   alembic/          # migrations
-  tests/
+  tests/            # fast suite (SQLite)
+  tests/integration/ # `-m integration` suite (real Postgres) — see its README
 frontend/           # app.sourcelya.com — the authenticated app, no landing content
   src/app/
     core/           # auth service, HTTP interceptor, route guard, API client,
@@ -452,12 +541,16 @@ docker-compose.yml
 
 ## Roadmap
 
-Outside the numbered phases below (a standalone validation task, done
-between FASE 2 and FASE 3): the [public landing
-site](#public-landing-site-sourcelyacom) at `sourcelya.com`.
+Outside the numbered phases below (standalone validation work, done
+between FASE 2 and FASE 3): the bilingual [public landing
+site](#public-landing-site-sourcelyacom) at `sourcelya.com`, and closing
+out FASE 1 with the [Postgres integration
+suite](#integration-suite-real-postgresql) and the `Locale` enum.
 
 - **FASE 1 — done**: architecture, minimal database schema, Supabase JWKS
-  auth, company onboarding, dashboard shell, internal-jobs endpoint shape.
+  auth, company onboarding, dashboard shell, internal-jobs endpoint shape,
+  and (closed out afterwards) a real-Postgres integration test suite
+  alongside the fast SQLite one.
 - **FASE 2 — done**: Suppliers and Products CRUD (with nested packaging
   components), company-scoped and cross-tenant-tested end to end; dashboard
   now shows real product counts/status instead of placeholders.

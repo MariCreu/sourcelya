@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="{{htmlLang}}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{meta.title}}</title>
+  <meta name="description" content="{{meta.description}}" />
+  <link rel="canonical" href="{{canonicalUrl}}" />
+
+  <!-- hreflang: tells crawlers these pages are language variants of the
+       same content, not duplicates competing with each other. -->
+  <link rel="alternate" hreflang="es" href="{{alternateEs}}" />
+  <link rel="alternate" hreflang="en" href="{{alternateEn}}" />
+  <link rel="alternate" hreflang="x-default" href="{{alternateDefault}}" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Sourcelya" />
+  <meta property="og:title" content="{{meta.title}}" />
+  <meta property="og:description" content="{{meta.ogDescription}}" />
+  <meta property="og:url" content="{{canonicalUrl}}" />
+  <meta property="og:locale" content="{{ogLocale}}" />
+  <!-- No og:image yet on purpose: add a real 1200x630 image before launch
+       rather than ship a placeholder that looks broken when shared. -->
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="{{meta.title}}" />
+  <meta name="twitter:description" content="{{meta.ogDescription}}" />
+
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/styles.css" />
+
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Sourcelya",
+      "url": "{{canonicalUrl}}",
+      "description": "{{meta.ogDescription}}"
+    }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">{{a11y.skipLink}}</a>
+
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="{{canonicalUrl}}">Sourcelya</a>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#how-it-works">{{nav.howItWorks}}</a>
+        <a class="login-link" href="{{appLoginUrl}}">{{nav.login}}</a>
+        <a
+          class="btn btn-primary btn-small"
+          href="{{appSignupUrl}}"
+          data-analytics-event="primary_cta_click"
+          >{{nav.startFree}}</a
+        >
+        <a class="lang-switch" href="{{langSwitch.otherHref}}" hreflang="{{langSwitch.otherHrefLang}}"
+          >{{langSwitch.current}} | {{langSwitch.otherLabel}}</a
+        >
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- 1. Hero -->
+    <section class="hero">
+      <div class="wrap">
+        <span class="kicker">{{hero.kicker}}</span>
+        <h1>{{hero.h1}}</h1>
+        <p class="subheading">{{hero.subheading}}</p>
+        <div class="cta-row">
+          <a
+            class="btn btn-primary"
+            href="{{appSignupUrl}}"
+            data-analytics-event="primary_cta_click"
+            >{{hero.primaryCta}}</a
+          >
+          <a class="btn btn-secondary" href="#how-it-works" data-analytics-event="secondary_cta_click"
+            >{{hero.secondaryCta}}</a
+          >
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. Problem -->
+    <section class="alt" aria-labelledby="problem-heading">
+      <div class="wrap">
+        <div class="section-heading">
+          <h2 id="problem-heading">{{problem.heading}}</h2>
+          <p>{{problem.subheading}}</p>
+        </div>
+        <div class="problem-grid">
+          <div class="problem-card">
+            <span class="icon" aria-hidden="true">{{problem.cards.0.icon}}</span>
+            <h3>{{problem.cards.0.label}}</h3>
+          </div>
+          <div class="problem-card">
+            <span class="icon" aria-hidden="true">{{problem.cards.1.icon}}</span>
+            <h3>{{problem.cards.1.label}}</h3>
+          </div>
+          <div class="problem-card">
+            <span class="icon" aria-hidden="true">{{problem.cards.2.icon}}</span>
+            <h3>{{problem.cards.2.label}}</h3>
+          </div>
+          <div class="problem-card">
+            <span class="icon" aria-hidden="true">{{problem.cards.3.icon}}</span>
+            <h3>{{problem.cards.3.label}}</h3>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. How it works -->
+    <section id="how-it-works" aria-labelledby="how-it-works-heading">
+      <div class="wrap">
+        <div class="section-heading">
+          <h2 id="how-it-works-heading">{{howItWorks.heading}}</h2>
+          <p>{{howItWorks.subheading}}</p>
+        </div>
+        <ol class="steps">
+          <li>
+            <div>
+              <h3>{{howItWorks.steps.0.title}}</h3>
+              <p>{{howItWorks.steps.0.description}}</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>{{howItWorks.steps.1.title}}</h3>
+              <p>{{howItWorks.steps.1.description}}</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>{{howItWorks.steps.2.title}}</h3>
+              <p>{{howItWorks.steps.2.description}}</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3>{{howItWorks.steps.3.title}}</h3>
+              <p>{{howItWorks.steps.3.description}}</p>
+            </div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 4. Who it's for -->
+    <section class="alt" aria-labelledby="audience-heading">
+      <div class="wrap">
+        <div class="section-heading">
+          <h2 id="audience-heading">{{audience.heading}}</h2>
+        </div>
+        <div class="audience-grid">
+          <div class="audience-card">
+            <h3>{{audience.cards.0.title}}</h3>
+            <p>{{audience.cards.0.description}}</p>
+          </div>
+          <div class="audience-card">
+            <h3>{{audience.cards.1.title}}</h3>
+            <p>{{audience.cards.1.description}}</p>
+          </div>
+          <div class="audience-card">
+            <h3>{{audience.cards.2.title}}</h3>
+            <p>{{audience.cards.2.description}}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. First regulatory focus -->
+    <section aria-labelledby="regulatory-heading">
+      <div class="wrap regulatory">
+        <span class="badge">{{regulatory.badge}}</span>
+        <h2 id="regulatory-heading">{{regulatory.heading}}</h2>
+        <p>{{regulatory.body}}</p>
+        <p class="disclaimer">{{regulatory.disclaimer}}</p>
+      </div>
+    </section>
+
+    <!-- 6. Final CTA -->
+    <section class="alt final-cta" aria-labelledby="final-cta-heading">
+      <div class="wrap">
+        <h2 id="final-cta-heading">{{finalCta.heading}}</h2>
+        <p>{{finalCta.subheading}}</p>
+        <a
+          class="btn btn-primary"
+          href="{{appSignupUrl}}"
+          data-analytics-event="primary_cta_click"
+          >{{finalCta.cta}}</a
+        >
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>&copy; <span id="year"></span> Sourcelya</span>
+      <a href="{{appLoginUrl}}">{{footer.loginLink}}</a>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+  <script src="/analytics.js"></script>
+</body>
+</html>

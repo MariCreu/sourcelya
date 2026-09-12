@@ -77,6 +77,8 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  row-gap: 10px;
   padding-top: 18px;
   padding-bottom: 18px;
 }
@@ -92,6 +94,8 @@ a {
   display: flex;
   align-items: center;
   gap: 24px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .site-nav a {
@@ -102,6 +106,21 @@ a {
 
 .site-nav a.login-link {
   color: var(--color-text-muted);
+}
+
+.site-nav a.lang-switch {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.site-nav a.lang-switch:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 /* --- Buttons --- */

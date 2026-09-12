@@ -41,3 +41,25 @@ class ComplianceStatus(str, Enum):
     GREEN = "green"
     ORANGE = "orange"
     RED = "red"
+
+
+class Locale(str, Enum):
+    """Reserved for two future, related uses — kept as one shared type
+    rather than two, since they're the same concept:
+
+    1. `ComplianceRequest.language` (FASE 3): the request/email/public
+       supplier portal all need to speak the language the *supplier* works
+       in, which is independent of the buyer company's own language — a
+       Spanish company can have a supplier in Germany or China. That column
+       doesn't exist yet (`ComplianceRequest` isn't built until FASE 3);
+       this enum exists now purely so that column has an obvious, already-
+       agreed type to use instead of inventing one under time pressure.
+    2. The Angular app's own locale switching, if/when it's implemented —
+       see frontend README for why that isn't built out yet either.
+
+    Only ES/EN for now, matching the initial Spain-first go-to-market — not
+    a statement that Sourcelya only ever supports two languages.
+    """
+
+    ES = "es"
+    EN = "en"

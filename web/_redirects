@@ -1,0 +1,4 @@
+# Netlify redirect rule: a real HTTP redirect where the host supports it,
+# instead of relying only on the meta-refresh in the root index.html
+# (which stays as a host-agnostic fallback for hosts that ignore this file).
+/    /es/    302
