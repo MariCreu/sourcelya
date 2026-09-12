@@ -8,7 +8,7 @@ from app.core.logging import configure_logging, get_logger
 settings = get_settings()
 configure_logging(debug=settings.debug)
 logger = get_logger(__name__)
-logger.info("packproof_api_starting", environment=settings.environment)
+logger.info("sourcelya_api_starting", environment=settings.environment)
 
 app = FastAPI(title=settings.app_name)
 

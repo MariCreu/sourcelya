@@ -1,6 +1,6 @@
 """Verification of Supabase-issued JWTs.
 
-PackProof never issues its own login tokens: the frontend authenticates
+Sourcelya never issues its own login tokens: the frontend authenticates
 directly against Supabase Auth and forwards the resulting access token on
 every API call. This module is the single place that trusts (or rejects)
 that token, so any bug here is a full tenant-isolation bug.

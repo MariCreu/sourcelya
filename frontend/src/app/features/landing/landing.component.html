@@ -1,5 +1,5 @@
 <header class="topbar">
-  <span class="logo">PackProof</span>
+  <span class="logo">{{ brand.name }}</span>
   <nav>
     <a routerLink="/login">Log in</a>
     <a class="cta-secondary" routerLink="/signup">Start free</a>
@@ -7,12 +7,13 @@
 </header>
 
 <section class="hero">
-  <h1>Import products?<br />Stop chasing suppliers for compliance documents.</h1>
-  <p class="subheading">
-    PackProof collects packaging information from your suppliers and keeps the evidence organised
-    for you.
+  <h1>{{ brand.tagline }}</h1>
+  <p class="subheading">{{ brand.explanation }}</p>
+  <a class="cta-primary" routerLink="/signup">Start free</a>
+  <p class="kicker">
+    Starting with packaging compliance (PPWR) — built to extend to other supplier documentation
+    over time.
   </p>
-  <a class="cta-primary" routerLink="/signup">Check my first product free</a>
 </section>
 
 <section class="problem">
@@ -23,14 +24,14 @@
     <li>PDFs</li>
     <li>Shared folders</li>
   </ul>
-  <p>PackProof turns that into one workflow.</p>
+  <p>{{ brand.name }} turns that into one workflow.</p>
 </section>
 
 <section class="how-it-works">
   <h2>How it works</h2>
   <ol>
     <li>Add your supplier</li>
-    <li>PackProof requests the information</li>
+    <li>{{ brand.name }} requests the information</li>
     <li>Supplier uploads documents</li>
     <li>You see what is complete and what is missing</li>
   </ol>
@@ -39,7 +40,7 @@
 <section class="final-cta">
   <a class="cta-primary" routerLink="/signup">Start free</a>
   <p class="disclaimer">
-    PackProof helps you collect and organise supplier packaging documentation. It does not
+    {{ brand.name }} helps you collect and organise supplier documentation. It does not
     constitute legal advice and does not guarantee regulatory compliance.
   </p>
 </section>

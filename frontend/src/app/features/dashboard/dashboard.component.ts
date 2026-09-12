@@ -2,6 +2,7 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
+import { BRAND } from '../../core/brand';
 import { BackendApiService } from '../../core/services/backend-api.service';
 import { Company } from '../../core/services/company.models';
 
@@ -16,6 +17,8 @@ export class DashboardComponent implements OnInit {
   private readonly authService = inject(AuthService);
   private readonly api = inject(BackendApiService);
   private readonly router = inject(Router);
+
+  readonly brand = BRAND;
 
   loading = signal(true);
   company = signal<Company | null>(null);

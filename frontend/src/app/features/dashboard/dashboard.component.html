@@ -1,5 +1,5 @@
 <header class="topbar">
-  <span class="logo">PackProof</span>
+  <span class="logo">{{ brand.name }}</span>
   <button class="link-button" (click)="logout()">Log out</button>
 </header>
 
@@ -60,7 +60,7 @@
     <section class="empty-state">
       <p class="muted">
         No suppliers yet. Adding products and suppliers is coming in the next iteration of
-        PackProof.
+        {{ brand.name }}.
       </p>
     </section>
   }

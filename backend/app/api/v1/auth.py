@@ -15,7 +15,7 @@ def read_current_user(
 ) -> CurrentUserRead:
     """Returns the authenticated user and, if onboarding is complete, their company.
 
-    `company` is null when the Supabase user has no PackProof company yet —
+    `company` is null when the Supabase user has no Sourcelya company yet —
     the frontend uses that to route to the onboarding screen instead of the
     dashboard.
     """

@@ -3,7 +3,7 @@ import { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase-client';
 
 /**
- * Thin wrapper around Supabase Auth. PackProof never implements its own
+ * Thin wrapper around Supabase Auth. Sourcelya never implements its own
  * signup/login/password logic — Supabase owns that entirely, and the
  * backend only ever verifies the resulting access token (see
  * backend/app/core/security.py). This service exists so the rest of the

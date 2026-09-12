@@ -1,15 +1,43 @@
-# PackProof
+# Sourcelya
 
-PackProof helps small and medium European importers collect packaging compliance
-documentation from their suppliers — starting with PPWR — instead of chasing it
-over email and spreadsheets.
+**Supplier compliance, without the chasing.**
 
-> PackProof helps you collect and organise supplier packaging documentation. It
-> does not constitute legal advice and does not guarantee regulatory compliance.
+Sourcelya helps companies obtain, structure, verify and maintain the
+documentation and evidence they need from their suppliers. The product's
+marketing copy (tagline, one-line explanation) lives in one place —
+`frontend/src/app/core/brand.ts` — and is explicitly not final; see
+[Product positioning](#product-positioning) below.
+
+> Sourcelya helps you collect and organise supplier documentation. It does
+> not constitute legal advice and does not guarantee regulatory compliance.
 
 This repository currently implements **FASE 1** of the roadmap: architecture,
 database schema and authentication. See [Roadmap](#roadmap) below for what's
 next.
+
+## Product positioning
+
+Sourcelya is **not** a PPWR-only tool. PPWR (packaging waste regulation) is
+the first market wedge — the concrete, narrow problem that gets a first
+customer to pay — not the product's ceiling. The underlying flow is generic:
+
+```
+Buyer -> Supplier -> Request -> Documents -> Structured data -> Missing information
+```
+
+which is why the domain model uses generic names —
+`ComplianceRequest`, `SupplierDocument`, `PackagingComponent`, `ExtractedField`
+— instead of regulation-specific ones (`PPWRRequest`, `PPWRDocument`, ...).
+The regulation is meant to be a layer on top of this flow, not something
+baked into the architecture. Concretely, that means: no code in this
+repository should assume PPWR is the only compliance obligation a request or
+document can be about, even though PPWR is the only one the MVP's UI/copy
+talks about today.
+
+Explicitly **not** being built now, even though the architecture shouldn't
+block them later: Digital Product Passport (DPP), EUDR, REACH, a supplier
+network/marketplace, ecommerce integrations, advanced billing. See
+[Roadmap](#roadmap) for what actually ships in each phase.
 
 ## Architecture
 
@@ -45,7 +73,7 @@ Supabase Cron / pg_cron  --HTTP-->  POST /internal/jobs/process-reminders
   `email/` (Resend), `storage/` (Supabase Storage), `extraction/`
   (`DocumentExtractionService` — no real AI/OCR wired up yet, see below).
 
-**Auth model**: PackProof does not implement its own signup/login. The Angular
+**Auth model**: Sourcelya does not implement its own signup/login. The Angular
 app talks directly to Supabase Auth and gets a JWT back; the backend's only job
 is to verify that JWT (`app/core/security.py`) and mirror the Supabase user
 into a local `users` row on first authenticated call. Company onboarding
@@ -135,6 +163,27 @@ fields. With the small number of records the MVP will have during
 validation, this avoids an entire class of bugs where a cached value drifts
 from the real data. If usage later shows this is a real performance problem,
 that's the point to add denormalization or a materialized view — not before.
+
+### Domains
+
+The public target is **https://sourcelya.com**. Nothing needs deploying or
+pointing at DNS yet, but the codebase is already laid out so the app can
+later split across subdomains without a rewrite:
+
+- `sourcelya.com` — marketing/landing (today: the `/` route inside the same
+  Angular app as everything else — `LandingComponent`, no auth required).
+- `app.sourcelya.com` — the authenticated application (today: `/login`,
+  `/signup`, `/dashboard` in that same Angular app).
+- `api.sourcelya.com` — the FastAPI backend (already a separate deployable
+  unit — see `backend/`).
+
+Because the landing and the authenticated app are already separate routes/
+components with no shared state beyond `BRAND` and routing, splitting them
+into two Angular projects (or two static deployments) later is a build/
+deploy change, not a rewrite. `FRONTEND_BASE_URL` (backend CORS) and
+`apiBaseUrl` (frontend, `environment.production.ts`) are the two settings
+that would need to point at the new subdomains — see
+[Environment variables](#environment-variables).
 
 ## Data model
 
@@ -307,7 +356,8 @@ backend/
   tests/
 frontend/
   src/app/
-    core/           # auth service, HTTP interceptor, route guard, API client
+    core/           # auth service, HTTP interceptor, route guard, API client,
+                     # brand.ts (single source of truth for product naming/copy)
     features/       # landing, auth (login/signup), dashboard
     shared/         # reserved for cross-feature UI (empty for now)
   src/environments/

@@ -2,6 +2,7 @@ import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/auth/auth.service';
+import { BRAND } from '../../../core/brand';
 
 @Component({
   selector: 'app-signup',
@@ -12,6 +13,8 @@ import { AuthService } from '../../../core/auth/auth.service';
 })
 export class SignupComponent {
   private readonly authService = inject(AuthService);
+
+  readonly brand = BRAND;
 
   email = '';
   password = '';
