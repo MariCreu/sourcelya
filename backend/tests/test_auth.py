@@ -1,4 +1,6 @@
-from jose import jwt
+from datetime import datetime, timedelta, timezone
+
+import jwt
 
 from app.core.config import get_settings
 from tests.conftest import make_supabase_token
@@ -23,10 +25,16 @@ def test_me_rejects_expired_token(client):
 
 
 def test_me_rejects_wrong_signing_secret(client):
+    now = datetime.now(timezone.utc)
     token = jwt.encode(
-        {"sub": "abc", "email": "x@example.com", "aud": "authenticated"},
+        {
+            "sub": "abc",
+            "email": "x@example.com",
+            "aud": "authenticated",
+            "exp": now + timedelta(hours=1),
+        },
         "some-other-secret",
-        algorithm=settings.jwt_algorithm,
+        algorithm="HS256",
     )
     response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
@@ -34,6 +42,17 @@ def test_me_rejects_wrong_signing_secret(client):
 
 def test_me_rejects_wrong_audience(client):
     token = make_supabase_token(audience="not-authenticated")
+    response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 401
+
+
+def test_me_rejects_token_missing_subject(client):
+    now = datetime.now(timezone.utc)
+    token = jwt.encode(
+        {"aud": "authenticated", "exp": now + timedelta(hours=1)},
+        settings.supabase_jwt_secret,
+        algorithm="HS256",
+    )
     response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 401
 

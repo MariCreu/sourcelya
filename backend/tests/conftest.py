@@ -2,12 +2,14 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
+os.environ.setdefault("SUPABASE_JWT_STRATEGY", "hs256")
 os.environ.setdefault("SUPABASE_JWT_SECRET", "test-secret")
+os.environ.setdefault("INTERNAL_JOBS_SECRET", "test-internal-secret")
 os.environ.setdefault("ENVIRONMENT", "test")
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
-from jose import jwt
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -15,9 +17,11 @@ from sqlalchemy.pool import StaticPool
 from app.api.deps import get_db
 from app.core.config import get_settings
 from app.core.database import Base
+from app.core.security import get_token_verifier
 from app.main import app
 
 get_settings.cache_clear()
+get_token_verifier.cache_clear()
 settings = get_settings()
 
 # Import models so they register on Base.metadata before create_all.
@@ -53,9 +57,8 @@ def _clean_database():
 
 @pytest.fixture
 def client():
-    # Not using `with TestClient(...)` on purpose: that would run the
-    # startup/shutdown lifespan (including the APScheduler background
-    # scheduler) on every single test.
+    # Not using `with TestClient(...)` on purpose: that would run FastAPI's
+    # startup/shutdown lifespan on every single test, which we don't need.
     return TestClient(app)
 
 
@@ -66,6 +69,9 @@ def make_supabase_token(
     expired: bool = False,
     audience: str = "authenticated",
 ) -> str:
+    """Mints a token for the test (hs256) verifier strategy — see
+    test_auth_jwks.py for tokens exercising the real asymmetric/JWKS path.
+    """
     now = datetime.now(timezone.utc)
     payload = {
         "sub": user_id or str(uuid.uuid4()),
@@ -75,7 +81,7 @@ def make_supabase_token(
     }
     if email is not None:
         payload["email"] = email
-    return jwt.encode(payload, settings.supabase_jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(payload, settings.supabase_jwt_secret, algorithm="HS256")
 
 
 @pytest.fixture
@@ -85,3 +91,8 @@ def auth_header():
         return {"Authorization": f"Bearer {token}"}
 
     return _make
+
+
+@pytest.fixture
+def internal_jobs_header():
+    return {"X-Internal-Jobs-Secret": settings.internal_jobs_secret}

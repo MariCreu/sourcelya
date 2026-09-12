@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import List
+from typing import List, Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -28,13 +28,28 @@ class Settings(BaseSettings):
     # Supabase
     supabase_url: str = ""
     supabase_service_role_key: str = ""
-    supabase_jwt_secret: str = "dev-secret-change-me"
     supabase_storage_bucket: str = "packproof-documents"
 
-    # Auth / tokens
-    jwt_algorithm: str = "HS256"
+    # --- Auth / JWT verification ---
+    # "jwks" (default, production): Supabase's current recommended approach —
+    # asymmetric signing keys verified against the project's JWKS endpoint.
+    # "hs256": a shared secret, only for local/offline dev or tests that can't
+    # reach a real Supabase project. Defaulting to "jwks" means a forgotten
+    # env var fails safe (towards the stronger verification), not silently
+    # weak. See app/core/security.py.
+    supabase_jwt_strategy: Literal["jwks", "hs256"] = "jwks"
+    supabase_jwks_url: str = ""  # override; defaults to f"{supabase_url}/auth/v1/.well-known/jwks.json"
+    supabase_issuer: str = ""  # override; defaults to f"{supabase_url}/auth/v1"
+    supabase_jwt_allowed_algorithms: List[str] = ["ES256", "RS256"]
+    supabase_jwt_secret: str = "dev-secret-change-me"  # only used when strategy == "hs256"
+
     supplier_token_bytes: int = 32
     supplier_token_default_expiry_days: int = 30
+
+    # Internal jobs (e.g. POST /internal/jobs/process-reminders), called by
+    # Supabase Cron / pg_cron rather than a logged-in user. Generate with
+    # `openssl rand -hex 32`.
+    internal_jobs_secret: str = ""
 
     # Reminders (centralized, never hardcode elsewhere)
     reminder_schedule_days: List[int] = [3, 7, 14]
@@ -49,6 +64,14 @@ class Settings(BaseSettings):
 
     # Extraction
     document_extraction_provider: str = "stub"
+
+    @property
+    def resolved_supabase_jwks_url(self) -> str:
+        return self.supabase_jwks_url or f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+
+    @property
+    def resolved_supabase_issuer(self) -> str:
+        return self.supabase_issuer or f"{self.supabase_url.rstrip('/')}/auth/v1"
 
 
 @lru_cache

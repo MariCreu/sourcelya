@@ -18,10 +18,12 @@ Monolith, modular by layer — deliberately not microservices for an MVP this si
 ```
 Angular SPA  --HTTP/JWT-->  FastAPI monolith  --SQL-->  PostgreSQL (Supabase)
                                   |
-                                  +--> Supabase Auth (JWT verification only)
+                                  +--> Supabase Auth (JWKS verification only)
                                   +--> Supabase Storage (documents)
                                   +--> Resend (email)
                                   +--> DocumentExtractionService (pluggable)
+
+Supabase Cron / pg_cron  --HTTP-->  POST /internal/jobs/process-reminders
 ```
 
 **Backend layering** (`api -> services -> repositories -> models`):
@@ -29,24 +31,26 @@ Angular SPA  --HTTP/JWT-->  FastAPI monolith  --SQL-->  PostgreSQL (Supabase)
 - `api/` — FastAPI routers. Thin: parse request, call a service, return a schema.
 - `core/` — config, DB session, Supabase JWT verification, logging.
 - `models/` — SQLAlchemy ORM models (the source of truth for the schema).
+- `domain/` — pure-Python domain constants (`PackagingType`, `ComplianceStatus`)
+  that are validated in the application layer rather than enforced by a
+  native Postgres type — see [PostgreSQL enums](#postgresql-enums) below.
 - `schemas/` — Pydantic request/response contracts.
-- `services/` — business logic (`CompanyService`, `UserService`, and in later
-  phases `RequestService`, `DocumentService`, `StatusCalculationService`, ...).
+- `services/` — business logic (`CompanyService`, `UserService`,
+  `StatusCalculationService`, `ReminderService`, and in later phases
+  `RequestService`, `DocumentService`, ...).
 - `repositories/` — DB access. `CompanyScopedRepository` is the base every
   company-owned entity's repository extends, so a `company_id` filter can
   never be forgotten.
 - `integrations/` — adapters behind interfaces for external providers:
   `email/` (Resend), `storage/` (Supabase Storage), `extraction/`
   (`DocumentExtractionService` — no real AI/OCR wired up yet, see below).
-- `jobs/` — in-process background scheduler (APScheduler, not Celery/Redis —
-  see [Why no Celery/Redis](#why-no-celeryredis-for-jobs)).
 
 **Auth model**: PackProof does not implement its own signup/login. The Angular
 app talks directly to Supabase Auth and gets a JWT back; the backend's only job
-is to verify that JWT (`app/core/security.py`, HS256 against
-`SUPABASE_JWT_SECRET`) and mirror the Supabase user into a local `users` row on
-first authenticated call. Company onboarding (`POST /api/companies`) is a
-separate, explicit step.
+is to verify that JWT (`app/core/security.py`) and mirror the Supabase user
+into a local `users` row on first authenticated call. Company onboarding
+(`POST /api/companies`) is a separate, explicit step. See
+[JWT verification](#jwt-verification) below for how the token itself is checked.
 
 **Document extraction**: `DocumentExtractionService` (interface in
 `app/integrations/extraction/base.py`) is the only thing the domain talks to
@@ -55,41 +59,112 @@ suggestions — see product rationale below. Swapping in a real LLM/OCR provider
 later means writing one new adapter class, nothing else in the codebase
 changes.
 
-**Supplier tokens**: a supplier never has an account. Their request link
-(`/request/{secureToken}`) uses a cryptographically random token; only its
-SHA-256 hash is stored (`compliance_requests.secure_token_hash`), alongside
-`token_expires_at` / `token_revoked_at` so links can expire or be revoked.
+### JWT verification
 
-### Why no Celery/Redis for jobs
+`app/core/security.py` supports two verifiers, selected by
+`SUPABASE_JWT_STRATEGY`:
 
-The MVP's background work (a handful of reminder emails and extraction retries
-per day) doesn't justify a message broker. `app/jobs/scheduler.py` runs an
-in-process APScheduler instead — zero extra infrastructure, easy to reason
-about, and if volume ever grows enough to matter, only that one module and the
-service that enqueues into it need to change.
+- **`jwks` (default, production)** — Supabase's current recommended approach:
+  asymmetric signing keys, verified against the project's JWKS endpoint
+  (`https://<project>.supabase.co/auth/v1/.well-known/jwks.json`) via
+  `PyJWKClient`. Validates the signature (against the key matching the
+  token's `kid`), `exp`, `iss`, `aud`, and requires `sub` to be present.
+- **`hs256`** — a shared secret (`SUPABASE_JWT_SECRET`), only for local/offline
+  dev or CI that can't reach a real Supabase project. The strategy defaults to
+  `jwks`, not `hs256`, so forgetting to set the variable in production fails
+  towards the stronger check instead of silently accepting a weak one.
+
+Both verifiers pass an explicit `algorithms=[...]` allowlist to `jwt.decode`.
+PyJWT then refuses to verify a token whose header claims a different
+algorithm — the algorithm is never taken dynamically from the token itself,
+which is what stops the classic "alg confusion" attack (e.g. resubmitting an
+RS256/ES256 token with `alg: HS256`, using the public key as an HMAC secret).
+`tests/test_auth_jwks.py` proves this against a real local JWKS HTTP endpoint
+and a real EC keypair, not a mocked signature check.
+
+**Supplier tokens** (design decision, applies from FASE 3 onward when
+`ComplianceRequest` is introduced): a supplier never has an account. Their
+request link uses a cryptographically random token; only its SHA-256 hash
+would ever be stored, alongside an expiry and a revoked-at timestamp, so
+links can expire or be revoked without ever persisting a usable token in the
+database. `generate_secure_token` / `hash_token` in `app/core/security.py`
+already implement and test this.
+
+### Why not an in-process scheduler for jobs
+
+Background work (reminders, extraction retries) is **not** driven by a
+scheduler running inside the FastAPI process (e.g. APScheduler). With
+multiple API instances or workers, an in-process scheduler either double-runs
+jobs or needs its own leader-election machinery, and it only runs while that
+one process happens to be alive.
+
+Instead: `ReminderService` (`app/services/reminder_service.py`) holds the
+business logic, and `POST /internal/jobs/process-reminders`
+(`app/api/v1/internal.py`) is a plain, idempotent HTTP endpoint — protected by
+a shared secret (`INTERNAL_JOBS_SECRET`), since it's called by a scheduler,
+not a logged-in user. In production, **Supabase Cron / pg_cron** calls this
+endpoint on a schedule; locally or in tests, it's called manually or from a
+test client. Nothing here needs Celery/Redis either — see
+`tests/test_internal_jobs.py`.
+
+FASE 1 ships the endpoint and the service shell but not real reminder logic:
+`ComplianceRequest` (the thing being reminded about) doesn't exist until
+FASE 3. `ReminderService`'s docstring documents the intended idempotency
+mechanism (a `reminder_count` guard on the update, so a duplicate or
+overlapping cron invocation can never send the same interval's reminder
+twice) so FASE 6 implements it against an already-decided shape instead of
+inventing one under time pressure.
+
+### PostgreSQL enums
+
+Native Postgres `ENUM` types are reserved for values that are genuinely
+closed and stable. Fields whose set of values is likely to grow while the
+product is still being validated — `packaging_type` today; `document_type`
+and extraction `entity_type` once FASE 4/7 add those tables — are stored as
+plain `VARCHAR` and validated in Python (`app/domain/enums.py`, Pydantic
+schemas) instead. A native enum needs an `ALTER TYPE ... ADD VALUE`
+migration for every new value; a `VARCHAR` needs a one-line code change and
+no migration. See `app/domain/enums.py` for the full rationale.
+
+### Computed status, not cached
+
+`Product` and `PackagingComponent` have no `status` column.
+`StatusCalculationService` (`app/services/status_calculation_service.py`)
+computes the green/orange/red status on read, from the packaging component
+fields. With the small number of records the MVP will have during
+validation, this avoids an entire class of bugs where a cached value drifts
+from the real data. If usage later shows this is a real performance problem,
+that's the point to add denormalization or a materialized view — not before.
 
 ## Data model
 
-All entities from the product spec are modelled (see `backend/app/models/`):
-`Company`, `User`, `Supplier`, `Product`, `PackagingComponent`,
-`ComplianceRequest` / `ComplianceRequestProduct`, `SupplierDocument`,
-`ExtractedField`, `AuditEvent`.
+FASE 1 keeps the schema intentionally minimal — just what's needed for
+company/user auth plus the next phase's core catalog, so FASE 2 doesn't
+immediately redo the model. See `backend/app/models/`:
 
-Notable decisions beyond the spec:
+- **`Company`**, **`User`** — auth/tenancy. A `User.company_id` is set once,
+  via `POST /api/companies` (no multi-company-per-user in the MVP).
+- **`Supplier`**, **`Product`**, **`PackagingComponent`** — the FASE 2 catalog
+  entities, included now since they're immediate next-phase work, not
+  speculative.
 
-- **`ExtractedField` keeps full provenance** (source document, page, quoted
-  text) and is never auto-applied — a human must accept a suggestion before it
-  overwrites a real field. See the model's docstring.
-- **`Product.status` / `PackagingComponent.status`** (`green`/`orange`/`red`)
-  are denormalized caches written by `StatusCalculationService` (FASE 5), not
-  editable directly — the packaging component fields are the source of truth.
-- **UUID columns use a small custom `GUID` type** (`app/models/base.py`)
-  instead of `postgresql.UUID` directly, so the same models work against
-  SQLite in tests without a running Postgres instance, while still using
-  Postgres' native UUID type in production.
-- **`AuditEvent.metadata_json`** uses `JSON().with_variant(JSONB, "postgresql")`
-  for the same reason — generic JSON everywhere, JSONB specifically on
-  Postgres.
+Deliberately **not** modelled yet (each ships in its own phase, per the
+roadmap, rather than being built ahead of the feature that needs it):
+`ComplianceRequest` / `ComplianceRequestProduct` (FASE 3), `SupplierDocument`
+(FASE 4), `ExtractedField` (FASE 7), `AuditEvent` (incrementally, as the
+actions worth auditing get real endpoints). When they're added, they keep
+the design decisions already agreed for them — hashed/expirable/revocable
+supplier tokens, full extraction provenance (document/page/quoted text),
+`VARCHAR` instead of native enums for evolving fields.
+
+Notable implementation detail: **UUID columns use a small custom `GUID`
+type** (`app/models/base.py`) instead of `postgresql.UUID` directly, so the
+same models work against SQLite in tests without a running Postgres
+instance, while still using Postgres' native UUID type in production. This
+matters in practice, not just in theory: `postgresql.UUID` compiles into an
+untyped column on SQLite, which gets `NUMERIC` affinity and silently
+corrupts any digit-only UUID (exactly what handwritten test fixtures tend to
+use).
 
 ## Requirements
 
@@ -97,7 +172,9 @@ Notable decisions beyond the spec:
 - Node.js 20+ and npm
 - Docker + Docker Compose (optional — only needed for local Postgres; you can
   point `DATABASE_URL` at a remote Supabase Postgres instead)
-- A Supabase project (Auth + Storage) for anything beyond running the test suite
+- A Supabase project (Auth + Storage) for anything beyond running the test
+  suite — or set `SUPABASE_JWT_STRATEGY=hs256` to develop against the API
+  without one (see below)
 
 ## Environment variables
 
@@ -108,11 +185,19 @@ ones:
 | Variable | Purpose |
 | --- | --- |
 | `DATABASE_URL` | SQLAlchemy connection string (Postgres) |
-| `SUPABASE_JWT_SECRET` | Used to verify Supabase-issued access tokens |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase Storage access |
+| `SUPABASE_JWT_STRATEGY` | `jwks` (production/default) or `hs256` (local/offline dev only) |
+| `SUPABASE_URL` | Used to derive the JWKS URL/issuer, and for Storage access |
+| `SUPABASE_JWT_SECRET` | Only read when `SUPABASE_JWT_STRATEGY=hs256` |
+| `INTERNAL_JOBS_SECRET` | Required by `POST /internal/jobs/process-reminders` |
 | `REMINDER_SCHEDULE_DAYS` | Centralized reminder cadence — never hardcode this elsewhere |
 | `RESEND_API_KEY` | Leave empty locally: emails are logged instead of sent |
 | `DOCUMENT_EXTRACTION_PROVIDER` | `stub` today; a real provider plugs in behind `DocumentExtractionService` |
+
+If you don't have a Supabase project yet, set `SUPABASE_JWT_STRATEGY=hs256`
+and `SUPABASE_JWT_SECRET` to any value locally — the frontend won't be able
+to sign real users in via Supabase Auth without a project either way, but
+this lets you exercise the API directly (mint a token the same way
+`tests/conftest.py` does) without one.
 
 The frontend does not use `.env` — Angular config lives in
 `frontend/src/environments/environment.ts` (dev) and
@@ -127,7 +212,7 @@ meant to be public), so they aren't secrets the way the backend's
 ### With Docker Compose (Postgres + backend)
 
 ```bash
-cp .env.example .env   # fill in Supabase values
+cp .env.example .env   # fill in Supabase values, or use SUPABASE_JWT_STRATEGY=hs256
 docker compose up --build
 ```
 
@@ -167,14 +252,23 @@ Tests run against an in-memory SQLite database (no Postgres needed) and cover
 what matters most for an MVP handling multi-tenant data behind a public
 supplier link:
 
-- `test_auth.py` — Supabase JWT verification: missing/garbage/expired tokens,
-  wrong signing secret, wrong audience, and that a local `users` row is
-  created lazily and idempotently.
+- `test_auth.py` — the HS256 dev/test verifier: missing/garbage/expired
+  tokens, wrong signing secret, wrong audience, missing subject, and that a
+  local `users` row is created lazily and idempotently.
+- `test_auth_jwks.py` — the production JWKS verifier against a **real**
+  local JWKS HTTP server and a real EC keypair (not a mocked signature
+  check): valid token, expired, wrong issuer/audience, missing subject,
+  unknown key id, and — the important one — a genuinely valid ES256 token
+  rejected outright when the verifier is only configured to trust RS256.
 - `test_company_isolation.py` — a user can't see another company's data, can't
   onboard twice, and `CompanyScopedRepository` refuses cross-tenant reads even
   if an endpoint forgot to filter.
 - `test_security_tokens.py` — supplier tokens are unique, long enough, and
   only their hash is ever compared/stored.
+- `test_internal_jobs.py` — the reminders job endpoint requires its shared
+  secret and is safe to call repeatedly.
+- `test_status_calculation.py` — component/product status is derived
+  correctly from packaging component completeness.
 
 Frontend: `cd frontend && npm test` runs the Angular/Karma unit tests
 (requires a Chromium binary; see `frontend/README.md` if you need to point
@@ -191,9 +285,10 @@ alembic revision --autogenerate -m "message"  # generate a new one after model c
 alembic downgrade -1                          # roll back one
 ```
 
-`0001_initial_schema.py` creates the full FASE 1 schema (all tables and enum
-types). Review autogenerated migrations before applying — autogenerate can
-miss enum value changes and some constraint renames.
+`0001_initial_schema.py` creates the FASE 1 schema: `users`, `companies`,
+`suppliers`, `products`, `packaging_components` — no native Postgres enum
+types (see [PostgreSQL enums](#postgresql-enums)). Review autogenerated
+migrations before applying — autogenerate can miss some constraint renames.
 
 ## Project structure
 
@@ -203,11 +298,11 @@ backend/
     api/            # FastAPI routers + dependencies (auth, DB session)
     core/           # config, database, security (JWT), logging
     models/         # SQLAlchemy models
+    domain/         # pure-Python domain enums (not DB-mapped)
     schemas/        # Pydantic schemas
     repositories/   # DB access, company-scoped by default
     services/       # business logic
     integrations/   # email / storage / extraction adapters behind interfaces
-    jobs/           # in-process background scheduler
   alembic/          # migrations
   tests/
 frontend/
@@ -222,16 +317,20 @@ docker-compose.yml
 
 ## Roadmap
 
-- **FASE 1 — done**: architecture, database schema, Supabase JWT auth, company
-  onboarding, dashboard shell.
-- **FASE 2**: Products + Suppliers CRUD.
-- **FASE 3**: Compliance requests + secure supplier link (`/request/{token}`).
-- **FASE 4**: Document uploads (Supabase Storage, upload validation).
-- **FASE 5**: `StatusCalculationService` and the real dashboard (completion
-  percentages, missing-fields counts).
-- **FASE 6**: Resend email templates + centralized reminder scheduling.
-- **FASE 7**: A real `DocumentExtractionService` implementation behind the
-  existing interface, plus the accept/conflict UI for `ExtractedField`.
+- **FASE 1 — done**: architecture, minimal database schema, Supabase JWKS
+  auth, company onboarding, dashboard shell, internal-jobs endpoint shape.
+- **FASE 2**: Products + Suppliers CRUD (the API/UI layer on top of the
+  models already in FASE 1).
+- **FASE 3**: `ComplianceRequest` / `ComplianceRequestProduct` + secure
+  supplier link (`/request/{token}`).
+- **FASE 4**: `SupplierDocument` + document uploads (Supabase Storage,
+  upload validation).
+- **FASE 5**: The real dashboard (completion percentages, missing-fields
+  counts) built on `StatusCalculationService`.
+- **FASE 6**: Resend email templates + real `ReminderService` logic behind
+  the `POST /internal/jobs/process-reminders` shape already in place.
+- **FASE 7**: `ExtractedField` + a real `DocumentExtractionService`
+  implementation behind the existing interface, plus the accept/conflict UI.
 - **FASE 8**: Polish, broader test coverage, deployment readiness.
 
 Explicitly out of scope for the MVP (see the product brief): Digital Product
