@@ -1,0 +1,11 @@
+<header class="topbar">
+  <a class="logo" routerLink="/dashboard">{{ brand.name }}</a>
+  <nav>
+    <a routerLink="/dashboard" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"
+      >Dashboard</a
+    >
+    <a routerLink="/suppliers" routerLinkActive="active">Suppliers</a>
+    <a routerLink="/products" routerLinkActive="active">Products</a>
+  </nav>
+  <button class="link-button" (click)="logout()">Log out</button>
+</header>

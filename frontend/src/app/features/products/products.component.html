@@ -1,0 +1,79 @@
+<app-top-nav />
+
+<main>
+  <div class="page-header">
+    <h1>Products</h1>
+    <button class="cta-primary" (click)="showForm.set(!showForm())">
+      {{ showForm() ? 'Cancel' : 'Add product' }}
+    </button>
+  </div>
+
+  @if (showForm()) {
+    <div class="card form-card">
+      <form (ngSubmit)="createProduct()">
+        <label>
+          Name
+          <input type="text" name="name" [(ngModel)]="name" required />
+        </label>
+        <label>
+          SKU
+          <input type="text" name="sku" [(ngModel)]="sku" />
+        </label>
+        <label>
+          Description
+          <textarea name="description" [(ngModel)]="description" rows="2"></textarea>
+        </label>
+        <label>
+          Supplier
+          <select name="supplierId" [(ngModel)]="supplierId">
+            <option value="">No supplier yet</option>
+            @for (supplier of suppliers(); track supplier.id) {
+              <option [value]="supplier.id">{{ supplier.name }}</option>
+            }
+          </select>
+        </label>
+
+        @if (errorMessage()) {
+          <p class="error">{{ errorMessage() }}</p>
+        }
+
+        <button type="submit" [disabled]="creating()">
+          {{ creating() ? 'Adding…' : 'Add product' }}
+        </button>
+      </form>
+    </div>
+  }
+
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (products().length === 0) {
+    <div class="empty-state">
+      <p class="muted">No products yet. Add your first one to start tracking packaging data.</p>
+    </div>
+  } @else {
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>SKU</th>
+            <th>Supplier</th>
+            <th>Packaging</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (product of products(); track product.id) {
+            <tr class="clickable" [routerLink]="['/products', product.id]">
+              <td>{{ product.name }}</td>
+              <td>{{ product.sku || '—' }}</td>
+              <td>{{ supplierName(product.supplier_id) }}</td>
+              <td>{{ product.packaging_component_count }}</td>
+              <td><span class="status-badge status-{{ product.status }}">{{ product.status }}</span></td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</main>

@@ -1,0 +1,66 @@
+<app-top-nav />
+
+<main>
+  <div class="page-header">
+    <h1>Suppliers</h1>
+    <button class="cta-primary" (click)="showForm.set(!showForm())">
+      {{ showForm() ? 'Cancel' : 'Add supplier' }}
+    </button>
+  </div>
+
+  @if (showForm()) {
+    <div class="card form-card">
+      <form (ngSubmit)="createSupplier()">
+        <label>
+          Name
+          <input type="text" name="name" [(ngModel)]="name" required />
+        </label>
+        <label>
+          Email
+          <input type="email" name="email" [(ngModel)]="email" required />
+        </label>
+        <label>
+          Country
+          <input type="text" name="country" [(ngModel)]="country" maxlength="2" placeholder="e.g. CN" />
+        </label>
+
+        @if (errorMessage()) {
+          <p class="error">{{ errorMessage() }}</p>
+        }
+
+        <button type="submit" [disabled]="creating()">
+          {{ creating() ? 'Adding…' : 'Add supplier' }}
+        </button>
+      </form>
+    </div>
+  }
+
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (suppliers().length === 0) {
+    <div class="empty-state">
+      <p class="muted">No suppliers yet. Add your first one to start requesting information.</p>
+    </div>
+  } @else {
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Country</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (supplier of suppliers(); track supplier.id) {
+            <tr>
+              <td>{{ supplier.name }}</td>
+              <td>{{ supplier.email }}</td>
+              <td>{{ supplier.country || '—' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</main>

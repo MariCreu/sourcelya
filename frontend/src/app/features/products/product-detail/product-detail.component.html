@@ -1,0 +1,124 @@
+<app-top-nav />
+
+<main>
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (!product()) {
+    <p class="error">{{ errorMessage() }}</p>
+  } @else {
+    <p><a routerLink="/products">&larr; Back to products</a></p>
+
+    <div class="page-header">
+      <h1>{{ product()!.name }}</h1>
+      <span class="status-badge status-{{ product()!.status }}">{{ product()!.status }}</span>
+    </div>
+
+    @if (product()!.sku || product()!.description) {
+      <p class="muted">
+        @if (product()!.sku) {
+          SKU: {{ product()!.sku }}
+        }
+        @if (product()!.description) {
+          — {{ product()!.description }}
+        }
+      </p>
+    }
+
+    <div class="page-header">
+      <h2>Packaging components</h2>
+      <button class="cta-primary" (click)="showForm.set(!showForm())">
+        {{ showForm() ? 'Cancel' : 'Add component' }}
+      </button>
+    </div>
+
+    @if (showForm()) {
+      <div class="card form-card">
+        <form (ngSubmit)="addComponent()">
+          <label>
+            Name
+            <input type="text" name="name" [(ngModel)]="name" required placeholder="e.g. Outer box" />
+          </label>
+          <label>
+            Packaging type
+            <select name="packagingType" [(ngModel)]="packagingType" required>
+              @for (type of packagingTypes; track type) {
+                <option [value]="type">{{ type }}</option>
+              }
+            </select>
+          </label>
+          <label>
+            Material
+            <input type="text" name="material" [(ngModel)]="material" placeholder="e.g. cardboard" />
+          </label>
+          <label>
+            Weight (grams)
+            <input type="number" name="weightGrams" [(ngModel)]="weightGrams" min="0" />
+          </label>
+          <label>
+            Recycled content (%)
+            <input
+              type="number"
+              name="recycledContentPercentage"
+              [(ngModel)]="recycledContentPercentage"
+              min="0"
+              max="100"
+            />
+          </label>
+
+          @if (errorMessage()) {
+            <p class="error">{{ errorMessage() }}</p>
+          }
+
+          <button type="submit" [disabled]="creating()">
+            {{ creating() ? 'Adding…' : 'Add component' }}
+          </button>
+        </form>
+      </div>
+    }
+
+    @if (product()!.packaging_components.length === 0) {
+      <div class="empty-state">
+        <p class="muted">
+          No packaging components yet. Add one (box, bag, label, ...) to start tracking this
+          product's packaging data.
+        </p>
+      </div>
+    } @else {
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Material</th>
+              <th>Weight (g)</th>
+              <th>Recycled %</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (component of product()!.packaging_components; track component.id) {
+              <tr>
+                <td>{{ component.name }}</td>
+                <td>{{ component.packaging_type }}</td>
+                <td>{{ component.material || '—' }}</td>
+                <td>{{ component.weight_grams ?? '—' }}</td>
+                <td>{{ component.recycled_content_percentage ?? '—' }}</td>
+                <td>
+                  <span class="status-badge status-{{ component.status }}">{{ component.status }}</span>
+                </td>
+              </tr>
+              @if (component.missing_fields.length > 0) {
+                <tr>
+                  <td colspan="6" class="missing-fields">
+                    Missing: {{ component.missing_fields.join(', ') }}
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  }
+</main>

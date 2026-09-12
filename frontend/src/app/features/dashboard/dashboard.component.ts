@@ -1,32 +1,39 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { AuthService } from '../../core/auth/auth.service';
-import { BRAND } from '../../core/brand';
+import { RouterLink } from '@angular/router';
 import { BackendApiService } from '../../core/services/backend-api.service';
 import { Company } from '../../core/services/company.models';
+import { Product } from '../../core/services/product.models';
+import { TopNavComponent } from '../../shared/top-nav/top-nav.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink, TopNavComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss'
 })
 export class DashboardComponent implements OnInit {
-  private readonly authService = inject(AuthService);
   private readonly api = inject(BackendApiService);
-  private readonly router = inject(Router);
-
-  readonly brand = BRAND;
 
   loading = signal(true);
   company = signal<Company | null>(null);
+  products = signal<Product[]>([]);
   errorMessage = signal<string | null>(null);
 
   companyName = '';
   companyCountry = '';
   onboarding = signal(false);
+
+  readonly greenCount = computed(
+    () => this.products().filter((product) => product.status === 'green').length
+  );
+  readonly orangeCount = computed(
+    () => this.products().filter((product) => product.status === 'orange').length
+  );
+  readonly redCount = computed(
+    () => this.products().filter((product) => product.status === 'red').length
+  );
 
   ngOnInit(): void {
     this.loadCurrentUser();
@@ -38,11 +45,21 @@ export class DashboardComponent implements OnInit {
       next: (result) => {
         this.company.set(result.company);
         this.loading.set(false);
+        if (result.company) {
+          this.loadProducts();
+        }
       },
       error: () => {
         this.errorMessage.set('Could not load your account.');
         this.loading.set(false);
       }
+    });
+  }
+
+  private loadProducts(): void {
+    this.api.listProducts().subscribe({
+      next: (products) => this.products.set(products),
+      error: () => this.errorMessage.set('Could not load products.')
     });
   }
 
@@ -61,10 +78,5 @@ export class DashboardComponent implements OnInit {
           this.onboarding.set(false);
         }
       });
-  }
-
-  async logout(): Promise<void> {
-    await this.authService.signOut();
-    await this.router.navigateByUrl('/login');
   }
 }

@@ -22,5 +22,25 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent)
   },
+  {
+    path: 'suppliers',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/suppliers/suppliers.component').then((m) => m.SuppliersComponent)
+  },
+  {
+    path: 'products',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/products/products.component').then((m) => m.ProductsComponent)
+  },
+  {
+    path: 'products/:productId',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/products/product-detail/product-detail.component').then(
+        (m) => m.ProductDetailComponent
+      )
+  },
   { path: '**', redirectTo: '' }
 ];

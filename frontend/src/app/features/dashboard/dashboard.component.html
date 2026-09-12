@@ -1,7 +1,4 @@
-<header class="topbar">
-  <span class="logo">{{ brand.name }}</span>
-  <button class="link-button" (click)="logout()">Log out</button>
-</header>
+<app-top-nav />
 
 <main>
   @if (loading()) {
@@ -43,25 +40,27 @@
 
     <section class="summary">
       <div class="stat">
-        <span class="stat-value">0</span>
+        <span class="stat-value">{{ products().length }}</span>
         <span class="stat-label">Products</span>
       </div>
       <div class="stat">
-        <span class="status-badge status-green">0 Complete</span>
+        <span class="status-badge status-green">{{ greenCount() }} Complete</span>
       </div>
       <div class="stat">
-        <span class="status-badge status-orange">0 Missing information</span>
+        <span class="status-badge status-orange">{{ orangeCount() }} Missing information</span>
       </div>
       <div class="stat">
-        <span class="status-badge status-red">0 Review required</span>
+        <span class="status-badge status-red">{{ redCount() }} Review required</span>
       </div>
     </section>
 
-    <section class="empty-state">
-      <p class="muted">
-        No suppliers yet. Adding products and suppliers is coming in the next iteration of
-        {{ brand.name }}.
-      </p>
-    </section>
+    @if (products().length === 0) {
+      <section class="empty-state">
+        <p class="muted">
+          No products yet. <a routerLink="/suppliers">Add a supplier</a> and
+          <a routerLink="/products">a product</a> to get started.
+        </p>
+      </section>
+    }
   }
 </main>

@@ -1,0 +1,47 @@
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+
+  .logo {
+    font-weight: 700;
+    font-size: 18px;
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  nav {
+    display: flex;
+    gap: 24px;
+
+    a {
+      color: var(--color-text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+
+      &.active {
+        color: var(--color-text);
+      }
+
+      &:hover {
+        color: var(--color-text);
+      }
+    }
+  }
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 14px;
+
+  &:hover {
+    color: var(--color-text);
+  }
+}

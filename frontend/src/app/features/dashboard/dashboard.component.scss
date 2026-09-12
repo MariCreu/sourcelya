@@ -4,32 +4,6 @@
   background: var(--color-bg);
 }
 
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px 32px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
-
-  .logo {
-    font-weight: 700;
-    font-size: 18px;
-  }
-}
-
-.link-button {
-  background: none;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  font-size: 14px;
-
-  &:hover {
-    color: var(--color-text);
-  }
-}
-
 main {
   max-width: 880px;
   margin: 0 auto;
