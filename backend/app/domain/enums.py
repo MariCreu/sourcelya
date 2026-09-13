@@ -99,27 +99,82 @@ class AuditEventType(str, Enum):
     EMAIL_RESENT = "email_resent"
     DOCUMENT_UPLOADED = "document_uploaded"
     DOCUMENT_DELETED = "document_deleted"
+    EXTRACTION_COMPLETED = "extraction_completed"
+    EXTRACTION_FAILED = "extraction_failed"
+    EXTRACTED_FIELD_ACCEPTED = "extracted_field_accepted"
+    EXTRACTED_FIELD_REJECTED = "extracted_field_rejected"
 
 
 class DocumentType(str, Enum):
-    """Business classification of a `SupplierDocument`. FASE 4 has no UI or
-    logic that ever sets anything other than `OTHER` — there is no document
-    classifier yet (that's FASE 7's `DocumentExtractionService`) and no type
-    picker in the upload form, on purpose (see the product spec's explicit
-    "no clasificación automática todavía"). The column and this enum exist
-    now so a future classifier has somewhere to write its answer without a
-    schema change.
+    """Business classification of a `SupplierDocument`. Minimal, useful
+    categories only (see FASE 5 spec: "no crear una taxonomía enorme") —
+    set automatically by `DocumentExtractionService` as part of the same
+    call that extracts fields, never by a separate classifier or a manual
+    picker in the upload form.
     """
 
+    PACKAGING_SPECIFICATION = "packaging_specification"
+    TECHNICAL_DATASHEET = "technical_datasheet"
+    CERTIFICATE = "certificate"
+    DECLARATION = "declaration"
+    INVOICE_COMMERCIAL = "invoice_commercial"
     OTHER = "other"
 
 
 class ExtractionStatus(str, Enum):
-    """`SupplierDocument.extraction_status`. Every document is created with
-    `PENDING` and nothing moves it out of that state until FASE 7 wires up
-    a real `DocumentExtractionService` implementation — see that module's
-    docstring. Deliberately only one member for now rather than
-    pre-declaring FASE 7's states speculatively.
+    """`SupplierDocument.extraction_status` — a small state machine advanced
+    only by `ExtractionService` (FASE 5):
+
+        PENDING -> PROCESSING -> COMPLETED
+                                -> FAILED (retry moves back to PENDING)
+                                -> REVIEW_REQUIRED (COMPLETED, but at least
+                                   one field came back LOW confidence or with
+                                   an unresolved conflict at accept time)
+
+    A failed extraction never deletes or loses the original document — only
+    this status column changes; `POST /api/documents/{id}/retry-extraction`
+    re-attempts it.
     """
 
     PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    REVIEW_REQUIRED = "review_required"
+
+
+class ConfidenceLevel(str, Enum):
+    """How sure we are that an `ExtractedField` value is real, as a small
+    closed set of categories rather than an unfounded percentage — see
+    `app/services/extraction_service.py` module docstring for exactly how
+    each level is derived (a deterministic rule, never a raw LLM-reported
+    number taken at face value).
+    """
+
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class FieldReviewStatus(str, Enum):
+    """`ExtractedField.review_status` — sourced data never reaches
+    `PackagingComponent` until a human explicitly decides. See
+    `app/models/extracted_field.py`.
+    """
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class ExtractableFieldName(str, Enum):
+    """The only fields FASE 5 ever proposes values for — deliberately just
+    the `PackagingComponent` columns the product spec names, not a full
+    PPWR field set. See `app/services/extraction_service.py`.
+    """
+
+    PACKAGING_TYPE = "packaging_type"
+    MATERIAL = "material"
+    WEIGHT_GRAMS = "weight_grams"
+    RECYCLED_CONTENT_PERCENTAGE = "recycled_content_percentage"
+    PACKAGING_REFERENCE = "packaging_reference"

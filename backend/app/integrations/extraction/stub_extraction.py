@@ -1,18 +1,24 @@
-from app.integrations.extraction.base import DocumentExtractionService, ExtractedFieldSuggestion
+from app.domain.enums import DocumentType
+from app.integrations.extraction.base import DocumentExtractionResult, DocumentExtractionService
 
 
 class StubDocumentExtractionService(DocumentExtractionService):
-    """No real AI/OCR call is wired up yet (see product spec section 13/29:
-    extraction is not the FASE 1-6 priority).
-
-    Returns no suggestions, so uploaded documents stay attached to the
-    request/product but their `extraction_status` is left for
-    DocumentService to move to FAILED/PENDING rather than silently
-    fabricating data. Swap this out behind DocumentExtractionService in
-    FASE 7 for a real provider — nothing above this layer changes.
+    """The default when `DOCUMENT_EXTRACTION_PROVIDER` isn't `anthropic`
+    (e.g. no API key configured yet). Returns no suggestions and an
+    unclassified document, so uploaded documents stay attached to the
+    request/product without ever fabricating data — see
+    `ClaudeDocumentExtractionService` for the real implementation.
     """
 
     def extract(
         self, *, file_bytes: bytes, filename: str, content_type: str
-    ) -> list[ExtractedFieldSuggestion]:
-        return []
+    ) -> DocumentExtractionResult:
+        return DocumentExtractionResult(
+            document_classification=DocumentType.OTHER.value,
+            fields=[],
+            model="stub",
+            input_tokens=0,
+            output_tokens=0,
+            duration_ms=0,
+            estimated_cost_usd=0.0,
+        )

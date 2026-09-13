@@ -1,5 +1,7 @@
 import { DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../../core/analytics.service';
 import { LocaleService } from '../../../core/i18n/locale.service';
@@ -9,14 +11,34 @@ import {
   REQUEST_STATUS_BADGE_CLASSES,
   RequestStatus
 } from '../../../core/services/compliance-request.models';
-import { SupplierDocument } from '../../../core/services/supplier-document.models';
+import {
+  ConfidenceLevel,
+  ConflictResolution,
+  ExtractedField,
+  ExtractedFieldConflict
+} from '../../../core/services/extracted-field.models';
+import { ExtractionStatus, SupplierDocument } from '../../../core/services/supplier-document.models';
 import { formatFileSize } from '../../../core/util/format-file-size';
 import { TopNavComponent } from '../../../shared/top-nav/top-nav.component';
+
+const EXTRACTION_STATUS_BADGE_CLASSES: Record<ExtractionStatus, string> = {
+  pending: 'status-orange',
+  processing: 'status-orange',
+  completed: 'status-green',
+  failed: 'status-red',
+  review_required: 'status-red'
+};
+
+const CONFIDENCE_BADGE_CLASSES: Record<ConfidenceLevel, string> = {
+  high: 'status-green',
+  medium: 'status-orange',
+  low: 'status-red'
+};
 
 @Component({
   selector: 'app-request-detail',
   standalone: true,
-  imports: [DatePipe, RouterLink, TopNavComponent],
+  imports: [DatePipe, FormsModule, RouterLink, TopNavComponent],
   templateUrl: './request-detail.component.html',
   styleUrl: '../../../shared/list-page.scss'
 })
@@ -38,6 +60,13 @@ export class RequestDetailComponent implements OnInit {
   resending = signal(false);
   revealedUrl = signal<string | null>(null);
   copied = signal(false);
+
+  expandedDocumentId = signal<string | null>(null);
+  extractedFieldsByDocument = signal<Record<string, ExtractedField[]>>({});
+  loadingFieldsDocumentId = signal<string | null>(null);
+  retryingDocumentId = signal<string | null>(null);
+  reviewingFieldId = signal<string | null>(null);
+  conflictByFieldId = signal<Record<string, ExtractedFieldConflict>>({});
 
   private get requestId(): string {
     return this.route.snapshot.paramMap.get('requestId')!;
@@ -145,5 +174,127 @@ export class RequestDetailComponent implements OnInit {
       },
       error: () => this.actionError.set(this.t().requests.detail.actionError)
     });
+  }
+
+  extractionStatusBadgeClass(status: ExtractionStatus): string {
+    return EXTRACTION_STATUS_BADGE_CLASSES[status];
+  }
+
+  confidenceBadgeClass(confidence: ConfidenceLevel): string {
+    return CONFIDENCE_BADGE_CLASSES[confidence];
+  }
+
+  fieldLabel(fieldName: string): string {
+    const labels = this.t().requests.detail.fieldLabels as Record<string, string>;
+    return labels[fieldName] ?? fieldName;
+  }
+
+  isExpanded(document: SupplierDocument): boolean {
+    return this.expandedDocumentId() === document.id;
+  }
+
+  extractedFieldsFor(document: SupplierDocument): ExtractedField[] {
+    return this.extractedFieldsByDocument()[document.id] ?? [];
+  }
+
+  toggleFields(document: SupplierDocument): void {
+    if (this.isExpanded(document)) {
+      this.expandedDocumentId.set(null);
+      return;
+    }
+    this.expandedDocumentId.set(document.id);
+    if (this.extractedFieldsByDocument()[document.id]) {
+      return;
+    }
+    this.loadingFieldsDocumentId.set(document.id);
+    this.api.listExtractedFields(document.id).subscribe({
+      next: (fields) => {
+        this.extractedFieldsByDocument.update((current) => ({ ...current, [document.id]: fields }));
+        this.loadingFieldsDocumentId.set(null);
+      },
+      error: () => {
+        this.actionError.set(this.t().requests.detail.actionError);
+        this.loadingFieldsDocumentId.set(null);
+      }
+    });
+  }
+
+  retryExtraction(document: SupplierDocument): void {
+    this.retryingDocumentId.set(document.id);
+    this.actionError.set(null);
+    this.api.retryExtraction(document.id).subscribe({
+      next: () => {
+        this.retryingDocumentId.set(null);
+        this.extractedFieldsByDocument.update((current) => {
+          const next = { ...current };
+          delete next[document.id];
+          return next;
+        });
+        this.load();
+      },
+      error: () => {
+        this.actionError.set(this.t().requests.detail.actionError);
+        this.retryingDocumentId.set(null);
+      }
+    });
+  }
+
+  private replaceField(documentId: string, updated: ExtractedField): void {
+    this.extractedFieldsByDocument.update((current) => ({
+      ...current,
+      [documentId]: (current[documentId] ?? []).map((field) =>
+        field.id === updated.id ? updated : field
+      )
+    }));
+  }
+
+  accept(document: SupplierDocument, field: ExtractedField, resolution?: ConflictResolution): void {
+    this.reviewingFieldId.set(field.id);
+    this.actionError.set(null);
+    this.api
+      .acceptExtractedField(document.id, field.id, { conflict_resolution: resolution ?? null })
+      .subscribe({
+        next: (updated) => {
+          this.replaceField(document.id, updated);
+          this.conflictByFieldId.update((current) => {
+            const next = { ...current };
+            delete next[field.id];
+            return next;
+          });
+          this.reviewingFieldId.set(null);
+          this.load();
+        },
+        error: (err: HttpErrorResponse) => {
+          this.reviewingFieldId.set(null);
+          if (err.status === 409 && err.error?.detail?.detail === 'POSSIBLE CONFLICT') {
+            this.conflictByFieldId.update((current) => ({
+              ...current,
+              [field.id]: err.error.detail as ExtractedFieldConflict
+            }));
+          } else {
+            this.actionError.set(this.t().requests.detail.actionError);
+          }
+        }
+      });
+  }
+
+  reject(document: SupplierDocument, field: ExtractedField): void {
+    this.reviewingFieldId.set(field.id);
+    this.actionError.set(null);
+    this.api.rejectExtractedField(document.id, field.id).subscribe({
+      next: (updated) => {
+        this.replaceField(document.id, updated);
+        this.reviewingFieldId.set(null);
+        this.load();
+      },
+      error: () => {
+        this.actionError.set(this.t().requests.detail.actionError);
+        this.reviewingFieldId.set(null);
+      }
+    });
+  }
+
+  conflictFor(field: ExtractedField): ExtractedFieldConflict | null {
+    return this.conflictByFieldId()[field.id] ?? null;
   }
 }

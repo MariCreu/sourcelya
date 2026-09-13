@@ -1,10 +1,13 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company, get_db
 from app.models.company import Company
+from app.models.extracted_field import ExtractedField
+from app.domain.enums import FieldReviewStatus
 from app.schemas.packaging_component import (
     PackagingComponentCreate,
     PackagingComponentRead,
@@ -22,15 +25,33 @@ router = APIRouter(prefix="/products", tags=["products"])
 status_service = StatusCalculationService()
 
 
-def _to_detail_read(product) -> ProductDetailRead:
+def _pending_review_component_ids(db: Session, company_id: uuid.UUID) -> frozenset:
+    """Which `PackagingComponent`s have a FASE 5 `ExtractedField` still
+    awaiting a human decision — computed here (not inside
+    `StatusCalculationService`, which stays DB-free) and passed in so RED
+    can be produced. See that service's docstring.
+    """
+    stmt = select(ExtractedField.packaging_component_id).where(
+        ExtractedField.company_id == company_id,
+        ExtractedField.review_status == FieldReviewStatus.PENDING.value,
+        ExtractedField.packaging_component_id.is_not(None),
+    )
+    return frozenset(db.scalars(stmt).all())
+
+
+def _to_detail_read(db: Session, company_id: uuid.UUID, product) -> ProductDetailRead:
+    pending = _pending_review_component_ids(db, company_id)
     component_reads = [
         PackagingComponentRead.from_model(
-            component, status_service.calculate_component_status(component)
+            component,
+            status_service.calculate_component_status(
+                component, has_pending_review=component.id in pending
+            ),
         )
         for component in product.packaging_components
     ]
     return ProductDetailRead.from_model_with_components(
-        product, status_service.calculate_product_status(product), component_reads
+        product, status_service.calculate_product_status(product, pending), component_reads
     )
 
 
@@ -52,8 +73,9 @@ def list_products(
     company: Company = Depends(get_current_company), db: Session = Depends(get_db)
 ) -> list[ProductRead]:
     products = ProductService(db).list(company.id)
+    pending = _pending_review_component_ids(db, company.id)
     return [
-        ProductRead.from_model(product, status_service.calculate_product_status(product))
+        ProductRead.from_model(product, status_service.calculate_product_status(product, pending))
         for product in products
     ]
 
@@ -67,7 +89,7 @@ def get_product(
     product = ProductService(db).get(company.id, product_id)
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    return _to_detail_read(product)
+    return _to_detail_read(db, company.id, product)
 
 
 @router.patch("/{product_id}", response_model=ProductRead)
@@ -83,7 +105,8 @@ def update_product(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     if product is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-    return ProductRead.from_model(product, status_service.calculate_product_status(product))
+    pending = _pending_review_component_ids(db, company.id)
+    return ProductRead.from_model(product, status_service.calculate_product_status(product, pending))
 
 
 @router.post(
@@ -103,7 +126,7 @@ def create_packaging_component(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return PackagingComponentRead.from_model(
         component, status_service.calculate_component_status(component)
-    )
+    )  # brand-new component: never has a pending extraction proposal yet
 
 
 @router.get(
@@ -118,9 +141,13 @@ def list_packaging_components(
         components = PackagingComponentService(db).list_for_product(company.id, product_id)
     except ProductNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    pending = _pending_review_component_ids(db, company.id)
     return [
         PackagingComponentRead.from_model(
-            component, status_service.calculate_component_status(component)
+            component,
+            status_service.calculate_component_status(
+                component, has_pending_review=component.id in pending
+            ),
         )
         for component in components
     ]
@@ -146,6 +173,10 @@ def update_packaging_component(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Packaging component not found"
         )
+    pending = _pending_review_component_ids(db, company.id)
     return PackagingComponentRead.from_model(
-        component, status_service.calculate_component_status(component)
+        component,
+        status_service.calculate_component_status(
+            component, has_pending_review=component.id in pending
+        ),
     )

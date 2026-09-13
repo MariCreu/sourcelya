@@ -39,3 +39,14 @@ class PackagingComponentRepository:
         self.db.add(component)
         self.db.flush()
         return component
+
+    def get_by_id(
+        self, company_id: uuid.UUID, component_id: uuid.UUID
+    ) -> PackagingComponent | None:
+        """Company-scoped, but not `product_id`-scoped — used by the FASE 5
+        extracted-field review flow, which only ever has a
+        `packaging_component_id`, not the product it hangs off of."""
+        stmt = select(PackagingComponent).join(Product).where(
+            PackagingComponent.id == component_id, Product.company_id == company_id
+        )
+        return self.db.scalars(stmt).first()

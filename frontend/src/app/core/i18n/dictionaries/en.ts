@@ -219,8 +219,58 @@ export const en: Dictionary = {
       documentsTable: {
         filename: 'File',
         size: 'Size',
-        uploadedAt: 'Uploaded'
-      }
+        uploadedAt: 'Uploaded',
+        type: 'Type',
+        status: 'Processing',
+        fields: 'Fields'
+      },
+      documentTypeLabels: {
+        packaging_specification: 'Packaging specification',
+        technical_datasheet: 'Technical datasheet',
+        certificate: 'Certificate',
+        declaration: 'Declaration',
+        invoice_commercial: 'Invoice / commercial document',
+        other: 'Other'
+      },
+      extractionStatusLabels: {
+        pending: 'Pending',
+        processing: 'Processing…',
+        completed: 'Completed',
+        failed: 'Failed',
+        review_required: 'Review required'
+      },
+      viewFieldsButton: 'View extracted information',
+      hideFieldsButton: 'Hide',
+      retryButton: 'Retry',
+      retrying: 'Retrying…',
+      processingErrorPrefix: 'Error:',
+      extractedInformationHeading: 'Extracted information',
+      noExtractedFields: 'No data was found in this document.',
+      fieldLabels: {
+        packaging_type: 'Packaging type',
+        material: 'Material',
+        weight_grams: 'Weight (g)',
+        recycled_content_percentage: 'Recycled content (%)',
+        packaging_reference: 'Packaging reference'
+      },
+      confidenceLabels: {
+        high: 'High confidence',
+        medium: 'Medium confidence',
+        low: 'Low confidence'
+      },
+      sourcePrefix: 'Source:',
+      pagePrefix: 'Page',
+      unverifiedEvidence: '(quote not automatically verified)',
+      acceptButton: 'Accept',
+      rejectButton: 'Reject',
+      accepting: 'Accepting…',
+      rejecting: 'Rejecting…',
+      reviewedLabel: 'Reviewed',
+      conflictTitle: 'POSSIBLE CONFLICT',
+      conflictCurrentLabel: 'Current value:',
+      conflictExtractedLabel: 'Extracted value:',
+      useExtractedButton: 'Use extracted value',
+      keepCurrentButton: 'Keep current value'
     }
   },
 

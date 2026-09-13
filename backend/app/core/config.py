@@ -62,8 +62,12 @@ class Settings(BaseSettings):
     resend_api_key: str = ""
     email_from_address: str = "Sourcelya <notifications@sourcelya.com>"
 
-    # Extraction
+    # Extraction — "stub" (default) returns no suggestions; "anthropic" calls
+    # the real Claude API and requires anthropic_api_key. See
+    # app/integrations/extraction/claude_extraction.py.
     document_extraction_provider: str = "stub"
+    anthropic_api_key: str = ""
+    anthropic_extraction_model: str = "claude-opus-5"
 
     @property
     def resolved_supabase_jwks_url(self) -> str:

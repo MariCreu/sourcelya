@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.domain.enums import Locale
 from app.models.compliance_request import ComplianceRequest
+from app.models.extracted_field import ExtractedField
 from app.models.supplier_document import SupplierDocument
 from app.schemas.supplier_document import SupplierDocumentRead
 
@@ -41,8 +42,12 @@ class ComplianceRequestRead(BaseModel):
 
     @classmethod
     def from_model(
-        cls, request: ComplianceRequest, documents: list[SupplierDocument] = ()
+        cls,
+        request: ComplianceRequest,
+        documents: list[SupplierDocument] = (),
+        extracted_fields_by_document: dict[uuid.UUID, list[ExtractedField]] = None,
     ) -> "ComplianceRequestRead":
+        extracted_fields_by_document = extracted_fields_by_document or {}
         return cls(
             id=request.id,
             company_id=request.company_id,
@@ -66,7 +71,12 @@ class ComplianceRequestRead(BaseModel):
                 )
                 for rp in request.products
             ],
-            documents=[SupplierDocumentRead.from_model(document) for document in documents],
+            documents=[
+                SupplierDocumentRead.from_model(
+                    document, extracted_fields_by_document.get(document.id, [])
+                )
+                for document in documents
+            ],
         )
 
 
@@ -87,5 +97,6 @@ class ComplianceRequestSendResult(BaseModel):
         documents: list[SupplierDocument] = (),
     ) -> "ComplianceRequestSendResult":
         return cls(
-            request=ComplianceRequestRead.from_model(request, documents), request_url=request_url
+            request=ComplianceRequestRead.from_model(request, documents),
+            request_url=request_url,
         )

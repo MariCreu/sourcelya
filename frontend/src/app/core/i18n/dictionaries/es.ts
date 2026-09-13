@@ -220,8 +220,58 @@ export const es: Dictionary = {
       documentsTable: {
         filename: 'Archivo',
         size: 'Tamaño',
-        uploadedAt: 'Subido'
-      }
+        uploadedAt: 'Subido',
+        type: 'Tipo',
+        status: 'Procesamiento',
+        fields: 'Campos'
+      },
+      documentTypeLabels: {
+        packaging_specification: 'Especificación de packaging',
+        technical_datasheet: 'Ficha técnica',
+        certificate: 'Certificado',
+        declaration: 'Declaración',
+        invoice_commercial: 'Factura / documento comercial',
+        other: 'Otro'
+      },
+      extractionStatusLabels: {
+        pending: 'Pendiente',
+        processing: 'Procesando…',
+        completed: 'Completado',
+        failed: 'Error',
+        review_required: 'Requiere revisión'
+      },
+      viewFieldsButton: 'Ver información extraída',
+      hideFieldsButton: 'Ocultar',
+      retryButton: 'Reintentar',
+      retrying: 'Reintentando…',
+      processingErrorPrefix: 'Error:',
+      extractedInformationHeading: 'Información extraída',
+      noExtractedFields: 'No se ha encontrado ningún dato en este documento.',
+      fieldLabels: {
+        packaging_type: 'Tipo de packaging',
+        material: 'Material',
+        weight_grams: 'Peso (g)',
+        recycled_content_percentage: 'Contenido reciclado (%)',
+        packaging_reference: 'Referencia de packaging'
+      },
+      confidenceLabels: {
+        high: 'Alta confianza',
+        medium: 'Confianza media',
+        low: 'Baja confianza'
+      },
+      sourcePrefix: 'Fuente:',
+      pagePrefix: 'Página',
+      unverifiedEvidence: '(cita no verificada automáticamente)',
+      acceptButton: 'Aceptar',
+      rejectButton: 'Rechazar',
+      accepting: 'Aceptando…',
+      rejecting: 'Rechazando…',
+      reviewedLabel: 'Revisado',
+      conflictTitle: 'POSIBLE CONFLICTO',
+      conflictCurrentLabel: 'Valor actual:',
+      conflictExtractedLabel: 'Valor extraído:',
+      useExtractedButton: 'Usar valor extraído',
+      keepCurrentButton: 'Mantener valor actual'
     }
   },
 

@@ -11,11 +11,13 @@ marketing copy (tagline, one-line explanation) lives in one place —
 > Sourcelya helps you collect and organise supplier documentation. It does
 > not constitute legal advice and does not guarantee regulatory compliance.
 
-This repository currently implements **FASE 1–4** of the roadmap:
+This repository currently implements **FASE 1–5** of the roadmap:
 architecture, database schema, authentication, the Suppliers/Products
-catalog, the secure no-login-required supplier request flow, and now the
-supplier attaching real documents to that request. See
-[Roadmap](#roadmap) below for what's next.
+catalog, the secure no-login-required supplier request flow, the supplier
+attaching real documents to that request, and now turning those documents
+into structured, evidence-backed proposals a human reviews before anything
+ever touches `PackagingComponent`. See [Roadmap](#roadmap) below for what's
+next.
 
 ## Product positioning
 
@@ -84,12 +86,13 @@ into a local `users` row on first authenticated call. Company onboarding
 
 **Document extraction**: `DocumentExtractionService` (interface in
 `app/integrations/extraction/base.py`) is the only thing the domain talks to
-for AI/OCR. Today it's `StubDocumentExtractionService`, which returns no
-suggestions — see product rationale below. Swapping in a real LLM/OCR provider
-later means writing one new adapter class, nothing else in the codebase
-changes. FASE 4 introduces `SupplierDocument` with `extraction_status =
-PENDING` and nothing that ever moves it out of that state yet — see
-[Document uploads](#document-uploads-fase-4) below.
+for AI/OCR. `StubDocumentExtractionService` (default, no API key required)
+returns no suggestions; `ClaudeDocumentExtractionService` (FASE 5,
+`DOCUMENT_EXTRACTION_PROVIDER=anthropic`) calls the real Claude API and is
+the only code path that ever produces `ExtractedField` proposal rows — never
+`PackagingComponent` itself. See [Document extraction
+(FASE 5)](#document-extraction-fase-5) below for the full pipeline, the
+provider/cost rationale, and the anti-hallucination design.
 
 **Storage**: same adapter-behind-an-interface pattern as email —
 `StorageService` (`app/integrations/storage/base.py`), with
@@ -161,10 +164,10 @@ inventing one under time pressure.
 
 Native Postgres `ENUM` types are reserved for values that are genuinely
 closed and stable. Fields whose set of values is likely to grow while the
-product is still being validated — `packaging_type` today; `document_type`
-and extraction `entity_type` once FASE 4/7 add those tables — are stored as
-plain `VARCHAR` and validated in Python (`app/domain/enums.py`, Pydantic
-schemas) instead. A native enum needs an `ALTER TYPE ... ADD VALUE`
+product is still being validated — `packaging_type`, `document_type`,
+`extraction_status`, `confidence`, `field_name` — are stored as plain
+`VARCHAR` and validated in Python (`app/domain/enums.py`, Pydantic schemas)
+instead. A native enum needs an `ALTER TYPE ... ADD VALUE`
 migration for every new value; a `VARCHAR` needs a one-line code change and
 no migration. See `app/domain/enums.py` for the full rationale.
 
@@ -333,22 +336,30 @@ immediately redo the model. See `backend/app/models/`:
   authenticated user exists there); `metadata_json` is generic `JSON` on
   SQLite, `JSONB` on Postgres, same pattern as elsewhere in this codebase.
 
-- **`SupplierDocument`** (FASE 4) — a file the supplier attached, today
-  always through the public portal for a specific `ComplianceRequest`
-  (`supplier_id`/`product_id`/`request_id` are all independently nullable,
-  so a later phase can attach a document without going through a request).
-  `content_type` stores Sourcelya's own canonical MIME type for the
-  validated extension, never whatever the browser claimed — see [Document
-  uploads](#document-uploads-fase-4). `document_type` (`DocumentType` enum,
-  `OTHER` for everything today) and `extraction_status` (`ExtractionStatus`
-  enum, always `PENDING`) exist now so FASE 7's classifier/extractor have
-  somewhere to write without a schema change, without either one doing
-  anything yet.
-
-Still deliberately **not** modelled: `ExtractedField` (FASE 7). When it's
-added, it keeps the design decisions already agreed for it — full
-extraction provenance (document/page/quoted text), `VARCHAR` instead of a
-native enum for `entity_type`.
+- **`SupplierDocument`** (FASE 4, extended FASE 5) — a file the supplier
+  attached, today always through the public portal for a specific
+  `ComplianceRequest` (`supplier_id`/`product_id`/`request_id` are all
+  independently nullable, so a later phase can attach a document without
+  going through a request). `content_type` stores Sourcelya's own canonical
+  MIME type for the validated extension, never whatever the browser claimed
+  — see [Document uploads](#document-uploads-fase-4). `document_type`
+  (`DocumentType` enum: `packaging_specification`, `technical_datasheet`,
+  `certificate`, `declaration`, `invoice_commercial`, `other`) and
+  `extraction_status` (`ExtractionStatus` enum: `pending`, `processing`,
+  `completed`, `failed`, `review_required`) are now driven by a real
+  pipeline — see [Document extraction (FASE 5)](#document-extraction-fase-5).
+  FASE 5 also added bookkeeping columns for cost/observability:
+  `processing_error`, `extraction_attempts`, `extraction_model`,
+  `extraction_duration_ms`, `extraction_input_tokens`,
+  `extraction_output_tokens`, `extraction_cost_usd`.
+- **`ExtractedField`** (FASE 5) — one proposed value for one
+  `PackagingComponent` field, produced from one `SupplierDocument`. Carries
+  full provenance (`source_page`, `source_quote`, `quote_verified`) and a
+  `confidence` (`high`/`medium`/`low`), plus a `review_status`
+  (`pending`/`accepted`/`rejected`). **Never written into
+  `PackagingComponent` by the extractor** — only a human ACCEPT
+  (`ExtractedFieldService.accept()`) ever does that. See [Document
+  extraction (FASE 5)](#document-extraction-fase-5) for the full design.
 
 Notable implementation detail: **UUID columns use a small custom `GUID`
 type** (`app/models/base.py`) instead of `postgresql.UUID` directly, so the
@@ -384,7 +395,9 @@ ones:
 | `INTERNAL_JOBS_SECRET` | Required by `POST /internal/jobs/process-reminders` |
 | `REMINDER_SCHEDULE_DAYS` | Centralized reminder cadence — never hardcode this elsewhere |
 | `RESEND_API_KEY` | Leave empty locally: emails are logged instead of sent |
-| `DOCUMENT_EXTRACTION_PROVIDER` | `stub` today; a real provider plugs in behind `DocumentExtractionService` |
+| `DOCUMENT_EXTRACTION_PROVIDER` | `stub` (default, no suggestions, no API calls) or `anthropic` (real extraction — see [Document extraction (FASE 5)](#document-extraction-fase-5)) |
+| `ANTHROPIC_API_KEY` | Required only when `DOCUMENT_EXTRACTION_PROVIDER=anthropic` |
+| `ANTHROPIC_EXTRACTION_MODEL` | Defaults to `claude-opus-5` |
 | `MAX_UPLOAD_SIZE_MB` | Supplier document upload size ceiling (default 20) — see [Document uploads](#document-uploads-fase-4) |
 | `ALLOWED_UPLOAD_EXTENSIONS` | Accepted document extensions (default `pdf,xlsx,csv,docx,png,jpg,jpeg`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Required (with `SUPABASE_URL`) for real Supabase Storage; otherwise documents use the in-memory fallback |
@@ -464,6 +477,10 @@ POST   /api/public/requests/{token}/documents                 # upload (multipar
 DELETE /api/public/requests/{token}/documents/{document_id}
 
 GET    /api/documents/{document_id}/download                  # authenticated, company-scoped
+GET    /api/documents/{document_id}/extracted-fields           # proposals for one document
+POST   /api/documents/{document_id}/extracted-fields/{field_id}/accept   # 409 on conflict — see below
+POST   /api/documents/{document_id}/extracted-fields/{field_id}/reject
+POST   /api/documents/{document_id}/retry-extraction           # re-runs the pipeline, original file untouched
 
 POST   /api/internal/jobs/process-reminders                  # shared-secret, not user auth
 ```
@@ -477,7 +494,10 @@ responses are always scoped to that company. `Product` and
 `/api/public/requests/*` routes take **no** auth dependency at all — see
 [Public supplier portal](#public-supplier-portal). `ComplianceRequestRead`/
 `PublicComplianceRequestRead` both carry a `documents[]` array now — see
-[Document uploads](#document-uploads-fase-4).
+[Document uploads](#document-uploads-fase-4). On the authenticated side,
+each document also carries `extracted_field_count`/`pending_review_count`,
+and `GET /api/documents/{id}/extracted-fields` returns the full proposals
+with evidence — see [Document extraction (FASE 5)](#document-extraction-fase-5).
 
 ### Public supplier portal
 
@@ -612,6 +632,183 @@ audit events actually land in the table.
 the real HTTP API: supplier opens the request → uploads a PDF → submits →
 company downloads it and gets back the exact same bytes.
 
+### Document extraction (FASE 5)
+
+The FASE 5 target: turn an unstructured supplier document into
+evidence-backed, structured **proposals** for the existing
+`PackagingComponent` fields — never an autonomous rewrite of them. The one
+rule everything else here serves: **Sourcelya must never invent compliance
+data**, and it must never silently overwrite a value someone already
+entered.
+
+**Pipeline**: `DocumentService.create()` still only handles upload/storage
+(unchanged from FASE 4); once a document exists, `ExtractionService.process()`
+(`app/services/extraction_service.py`) runs **synchronously, inline, in the
+same request** — `pending -> processing -> completed | review_required |
+failed`. No job queue: at this volume (one document per upload) the
+inline call is simpler to reason about and to test than adding
+Celery/Redis for a single background step, matching this codebase's
+existing "no in-process scheduler, no message broker" stance (see [Why not
+an in-process scheduler](#why-not-an-in-process-scheduler-for-jobs)). A
+failed extraction (provider error, timeout, malformed response) is caught,
+recorded on `processing_error`, and leaves `extraction_status=failed` —
+**the original uploaded file is never touched or lost**, and `POST
+/api/documents/{id}/retry-extraction` re-runs the same pipeline against it.
+`review_required` is used when the extraction produced at least one `LOW`
+confidence field, so the company's UI can flag "look at this one first"
+without a separate polling mechanism.
+
+**Provider: Anthropic Claude** (`ClaudeDocumentExtractionService`,
+`app/integrations/extraction/claude_extraction.py`), model `claude-opus-5`
+by default, called via `client.messages.parse(..., output_format=
+DocumentExtractionSchema)` — Pydantic **structured outputs**, not a "parse
+the model's prose" approach. `DocumentExtractionSchema` uses `Literal`
+types for every closed field (`field_name`, `status`, `confidence`,
+`document_classification`) and `ConfigDict(extra="forbid")`, so the SDK
+itself rejects any response shape outside the exact schema Sourcelya
+defined — this is real, load-bearing input validation, not a formatting
+nicety. **Why Claude over a cheaper/local OCR pipeline**: the source
+documents are exactly the kind of messy, inconsistently-formatted PDFs/
+scans/spreadsheets a real packaging supplier sends, where a fixed OCR +
+regex pipeline breaks on the first document that doesn't match the assumed
+layout; a vision-capable LLM reads the *whole* page (or sheet) and
+distinguishes "the weight of this specific SKU's box" from other numbers
+on the same page, which brittle template matching cannot.
+
+**Cost estimate** (`app/integrations/extraction/pricing.py`,
+`estimate_cost_usd`): at Claude Opus 5 list pricing ($5/MTok input, $25/MTok
+output) a typical one-to-two-page packaging spec (image/vision tokens for a
+scanned page, or a few hundred tokens of extracted text for a native-text
+PDF/XLSX/CSV/DOCX) runs on the order of **$0.02–$0.08 per document** in our
+own manual testing, with the `effort: "low"` output config keeping output
+tokens (a handful of short structured fields) minimal. `SupplierDocument`
+persists `extraction_model`/`extraction_input_tokens`/
+`extraction_output_tokens`/`extraction_duration_ms`/`extraction_cost_usd`
+on every real run specifically so "what does processing 1,000 documents
+cost us" is a `SELECT sum(extraction_cost_usd) FROM supplier_documents`
+away, without needing a cost dashboard in this phase.
+
+**Format handling** (`app/integrations/extraction/document_text.py`,
+no OCR library, no separate vision pipeline):
+
+| Format | How it reaches the model |
+| --- | --- |
+| PDF with a text layer | Deterministic text extracted per-page with `pypdf`, sent as plain text — cheaper and exactly reproducible, no vision call needed |
+| Scanned PDF (no text layer) | `pypdf` returns no text → the **raw PDF bytes** go to Claude as a native `document` content block; Claude's built-in vision reads the scan directly — no separate OCR step or library |
+| XLSX | `openpyxl` converts every sheet to a plain-text grid, sent as text |
+| CSV | Decoded and sent as text directly |
+| DOCX | `python-docx` extracts paragraph/table text |
+| PNG / JPG | Sent as a native `image` content block — Claude's vision handles it the same way it handles a scanned PDF page |
+
+Deliberately **not** using OCR/vision for every format: a text-layer PDF,
+XLSX, CSV, or DOCX already has a lossless, free, deterministic text
+representation, so sending it as an image would just add cost and a new
+failure mode (mis-read digits) for zero benefit — vision is reserved for
+the two cases (scans, photos) that genuinely need it.
+
+**Evidence and anti-hallucination design** — the two things enforced
+together, never just one:
+
+1. The model must report, for every field it claims to have found, the
+   page number and the **exact quoted text** it based the value on
+   (`source_page`, `source_quote` in the schema) — not just the value.
+   A field the model can't support with a quote must be reported as
+   `NOT_FOUND`, and `NOT_FOUND`/`UNKNOWN` fields produce **no
+   `ExtractedField` row at all** — silence, not a low-confidence guess (see
+   `ExtractedField`'s own docstring).
+2. Sourcelya **independently verifies** that quote (`verify_quote()` in
+   `claude_extraction.py`) against text *we* extracted ourselves (the same
+   `document_text.py` pass above) for every format where a deterministic
+   text layer exists — never trusting the model's citation of its own
+   accuracy unchecked. A vision-read scan/image has no independent text to
+   check against, so its quote is unverifiable by construction — that's
+   reflected honestly in `quote_verified=False`, not hidden.
+
+**Confidence is a deterministic ceiling, not the model's raw self-report**
+(`resolve_confidence()`): `final = min(model's claimed level, a ceiling
+derived from verification)` — a verified quote can reach `HIGH`; no
+independently-checkable text layer to verify against (a scan/image) caps at
+`MEDIUM`; a claimed quote that verification could *not* find in our own
+extracted text caps at `LOW`. Sourcelya never presents a numeric confidence
+percentage the provider doesn't actually give a defensible basis for —
+three named categories, each backed by a specific, auditable rule, is what
+the FASE 5 spec asked for instead of an invented number.
+
+**Document classification**: a small closed set on purpose —
+`packaging_specification`, `technical_datasheet`, `certificate`,
+`declaration`, `invoice_commercial`, `other` — not a large taxonomy. The
+model classifies the whole document once per extraction call, for display
+only; nothing branches its extraction behavior on the category today.
+
+**Never overwrite without approval** — the actual mechanism, not just a
+UI convention: `ExtractionService` **only ever creates `ExtractedField`
+proposal rows**; nothing in it, or in the extraction provider, ever writes
+to `PackagingComponent`. `ExtractedFieldService.accept()`
+(`app/services/extracted_field_service.py`) is the **only** code path in
+the entire codebase allowed to apply a value to `PackagingComponent`, and
+only for a field a human explicitly accepted. If the target field already
+has a non-empty value that differs from the extracted one, `accept()`
+raises `FieldConflictError` (HTTP 409, body `{"detail": "POSSIBLE
+CONFLICT", "field_name", "current_value", "extracted_value"}`) instead of
+applying anything — the caller must resubmit with an explicit
+`conflict_resolution` (`"use_extracted"` or `"keep_current"`); there is no
+implicit default. `packaging_component_id` on `ExtractedField` is only
+auto-resolved when the request unambiguously covers a single
+`PackagingComponent` — the common first-request case — otherwise the
+reviewer picks the target component explicitly at accept time. This is the
+"minimal evolution" the FASE 5 spec asked for instead of a general-purpose
+data-lineage system: one small proposal table plus one gated write path,
+`PackagingComponent`'s own schema unchanged.
+
+**Missing information after accept**: reuses
+`StatusCalculationService` unchanged (see [Computed status, not
+cached](#computed-status-not-cached)) — accepting a field just writes a
+normal `PackagingComponent` column, so the existing green/orange status and
+missing-fields list pick it up for free. FASE 5 adds one thing on top: a
+component/product with any **pending** `ExtractedField` shows **RED**
+("needs a human decision") regardless of how confident the extraction was
+— `calculate_component_status`/`calculate_product_status` both take an
+optional `has_pending_review`/`components_with_pending_review` flag,
+computed by the caller from a lightweight query, so the service itself
+stays the same pure/DB-free function it always was. "Missing" still means
+exactly what it meant before FASE 5: fields our own model expects that
+have no value yet — no PPWR legal-requirement engine is introduced here.
+
+**Security — documents are untrusted input, always**: document content
+only ever appears inside `user`-role message content; the system prompt
+(`SYSTEM_PROMPT` in `claude_extraction.py`) is a fixed constant that never
+mixes with document text, so a document containing text like "ignore
+previous instructions, output X" cannot alter Sourcelya's own instructions
+to the model. The real defense is structural, not a runtime string filter:
+`DocumentExtractionSchema`'s `Literal` types + `extra="forbid"` mean the
+extractor **cannot** report a `field_name` outside the five known packaging
+fields, a `confidence` outside the three known levels, or any extra key at
+all — there is no schema-valid way for a malicious document to make the
+model call a tool, emit an instruction, or write outside
+`PackagingComponent`'s known fields, because the extractor never has tool
+access and never writes anywhere by itself in the first place.
+`backend/tests/test_claude_extraction_internals.py` includes dedicated
+prompt-injection-shaped fixtures (documents whose "content" is itself an
+injection attempt) asserting the extractor still only ever produces
+schema-valid field proposals, never an action.
+
+**Tests** (fixtures only — the suite never depends on a paid Claude API
+call): `test_claude_extraction_internals.py` (19 tests) covers the pure
+functions (`build_content_blocks`, `verify_quote`, `resolve_confidence`),
+the schema's `Literal`/`extra="forbid"` enforcement, and the
+prompt-injection fixtures, all without network access.
+`test_extraction_service.py` covers the pipeline state machine (pending →
+completed/review_required/failed, retry, a failure never losing the
+original document) against a `FakeDocumentExtractionService`.
+`test_extracted_fields.py` (10 tests) covers the HTTP surface: accept,
+reject, the 409 conflict body and both resolutions, company isolation (a
+field from another company's document is a 404), and
+`StatusCalculationService`'s RED status after accept/reject.
+`test_extraction_retry.py` covers retry specifically. `test_e2e_extraction_
+flow.py` runs the full lifecycle through the real HTTP API: upload → stub/
+fake extraction produces proposals → list them with evidence → accept one
+→ confirm the `PackagingComponent` and computed status actually changed.
+
 ### Frontend
 
 ```bash
@@ -684,6 +881,13 @@ public supplier link:
   `test_e2e_document_upload.py` — document upload validation, cross-request/
   cross-company isolation, audit events, and the full upload → submit →
   download lifecycle (see [Document uploads](#document-uploads-fase-4)).
+- `test_claude_extraction_internals.py` / `test_extraction_service.py` /
+  `test_extracted_fields.py` / `test_extraction_retry.py` /
+  `test_e2e_extraction_flow.py` — the extraction pipeline, evidence
+  verification, prompt-injection fixtures, accept/reject/conflict, retry,
+  company isolation, and the full extraction-to-accepted-value lifecycle
+  (see [Document extraction (FASE 5)](#document-extraction-fase-5)) —
+  fixtures only, never a paid call to the real Claude API.
 
 ### Integration suite (real PostgreSQL)
 
@@ -798,6 +1002,45 @@ involved), run in an actual Chromium browser via Playwright:
    downloaded file's bytes were compared against the original fixture
    file and matched exactly.
 
+**FASE 5**, same real-backend/real-Postgres/real-Chromium technique, on top
+of a freshly submitted document (extracted fields seeded in exactly the
+shape `ExtractionService` produces, to exercise the review UI without a
+paid Claude API call — the extraction pipeline itself is already exercised
+against fixtures in the automated suite, see [Document extraction
+(FASE 5)](#document-extraction-fase-5)):
+
+1. The company's documents table now shows Type (`Otro`), a Processing
+   status badge (`Completado`, green), and a Fields column — `3` proposed,
+   with a red `3` pending-review badge next to it.
+2. "Ver información extraída" expands an evidence panel per field: value,
+   a confidence badge (`Alta confianza`/`Confianza media`/`Baja confianza`),
+   and the source line (`Fuente: sample.pdf · Página 7`, or `(cita no
+   verificada automáticamente)` for the unverified low-confidence one).
+3. Accepting the `packaging_reference` field (no existing value → no
+   conflict) applies immediately and the badge changes to
+   `Revisado: accepted`.
+4. Accepting the `weight_grams` field (existing value `42`, extracted `47`)
+   shows the exact conflict UI from the spec — "POSIBLE CONFLICTO / Valor
+   actual: 42.0 / Valor extraído: 47" — with "Usar valor extraído"/
+   "Mantener valor actual" buttons; choosing "Usar valor extraído" applies
+   `47` and marks the field accepted.
+5. Rejecting the `recycled_content_percentage` field (low confidence,
+   unverified quote) marks it `Revisado: rejected` and leaves the
+   component's existing value untouched.
+6. The product detail page now shows `weight_grams = 47` (the accepted
+   value) and `recycled_content_percentage` unchanged at `10` (the rejected
+   proposal never applied) — status is green now that every proposal has
+   been reviewed (no more pending-review row flipping it red).
+7. Switching to `EN` translates the whole panel live — confidence labels,
+   "Reviewed: accepted/rejected", evidence prefixes — without touching the
+   underlying data, same pattern as every earlier phase's i18n.
+8. Forcing `extraction_status=failed` on the document shows the red
+   "Error" badge with the stored `processing_error` message and a
+   "Reintentar" button; clicking it re-runs the pipeline, restores
+   `Completado`, and **all three previously-reviewed fields are still
+   there, still in their accepted/rejected state** — a retry never re-asks
+   a question a human already answered, and never loses the original file.
+
 ## Technical debt & simplifications
 
 Decisions made during FASE 3 to keep the scope to "close the request loop,
@@ -854,10 +1097,11 @@ FASE 4:
   tests and the real-Supabase-shaped path, but not by an integration test
   against a real Supabase Storage bucket — no such bucket exists in this
   environment.
-- **`document_type` is always `OTHER`.** There is no type picker in the
-  upload form and no classifier yet (that's explicitly FASE 7's job) — the
-  column exists so a future classifier has somewhere to write its answer
-  without a schema change, but nothing populates it today.
+- **`document_type` is classified by the real extraction pipeline as of
+  FASE 5** (see [Document extraction (FASE 5)](#document-extraction-fase-5))
+  — under the stub provider (the default; no `ANTHROPIC_API_KEY`) it's
+  still always `other`, since the stub does no classification at all. There
+  is still no manual type picker in the upload form.
 - **Downloads are read in full into memory** (`StorageService.download`
   returns `bytes`, not a stream) before being returned. Acceptable at the
   `max_upload_size_mb` ceiling this MVP enforces (20MB default); would need
@@ -866,12 +1110,61 @@ FASE 4:
 - **No virus/malware scanning.** Validation is extension + declared MIME
   type + size only, exactly what the FASE 4 spec asked for ("validación
   MIME/extensión") — a real content-sniffing or antivirus pass is not
-  attempted, and isn't currently planned for a specific later phase either.
+  attempted. **This is not optional debt** — it is an explicit, mandatory
+  item on the [pre-production checklist](#pre-production-checklist) below,
+  now that FASE 5 also feeds every uploaded file's bytes to an external
+  LLM API.
 - **The company side has no delete.** The spec's explicit bullet list says
   "listar y descargar documentos recibidos" for the company — deleting a
   supplier's upload is something only the supplier can do (and only before
   submit), matching a paper-trail mental model where the company shouldn't
   be able to make a received document disappear.
+
+FASE 5:
+
+- **Extraction runs synchronously, inline in the upload request** — no job
+  queue (see [Document extraction (FASE 5)](#document-extraction-fase-5)
+  for why, consistent with this codebase's existing no-scheduler/no-broker
+  stance). This is the first phase where that tradeoff has a real latency
+  cost (an LLM call, not a DB write) — the point to revisit it is if upload
+  response times under real document volume become a problem, not before.
+- **Single-component auto-link heuristic.** `ExtractedField.
+  packaging_component_id` is only auto-resolved when a request covers
+  exactly one `PackagingComponent`; a request covering several requires the
+  reviewer to pick the target component explicitly at accept time (the
+  frontend doesn't expose that picker yet — `packaging_component_id` would
+  need to be sent in `AcceptExtractedFieldPayload`, which the API already
+  supports). Fine for the common single-component first request; a
+  multi-component UI is the natural next increment, not a redesign.
+- **No cost dashboard.** `extraction_cost_usd` and friends are persisted
+  per document specifically so "cost per 1,000 documents" is answerable
+  with a `SELECT sum(...)`, but nothing in the UI surfaces it yet — the
+  spec explicitly said a dashboard wasn't needed for this phase.
+- **Confidence is a three-level ceiling, not a numeric score.** Deliberate,
+  not a shortcut — see [Document extraction
+  (FASE 5)](#document-extraction-fase-5) for why an invented percentage
+  would be less honest than three auditable categories.
+- **`ClaudeDocumentExtractionService` has no automated test that hits the
+  real Anthropic API** (by design — see [Tests](#tests): the suite must
+  never depend on a paid call). Its pure logic (prompt construction, quote
+  verification, confidence resolution, schema validation) is fully unit
+  tested; only the actual network call to Claude itself is unverified by
+  the automated suite, and was instead verified manually — see [Manual
+  flow](#manual-flow-verified-end-to-end).
+
+### Pre-production checklist
+
+Explicit, so it never quietly falls off a future phase's radar:
+
+- [ ] Malware/antivirus scanning on every uploaded document, before it is
+      stored or sent to any extraction provider (see above — FASE 4 debt,
+      sharper now that FASE 5 forwards file bytes to an external API).
+- [ ] A real job queue for extraction if inline latency becomes a problem
+      at real volume (see FASE 5 debt above).
+- [ ] A Supabase Storage bucket wired up and exercised by an integration
+      test (today only `InMemoryStorageService` runs in CI/local dev).
+- [ ] `SUPABASE_JWT_STRATEGY=jwks` configured against a real Supabase
+      project (production must never run on `hs256`).
 
 ## Migrations
 
@@ -892,8 +1185,10 @@ FASE 2 added no new tables (Supplier/Product/PackagingComponent were already
 part of `0001_initial_schema.py`). `0002_compliance_requests.py` (FASE 3)
 adds `compliance_requests`, `compliance_request_products`, and
 `audit_events`. `0003_supplier_documents.py` (FASE 4) adds
-`supplier_documents` — all applied and verified against a real local
-PostgreSQL 16 instance, not just SQLite.
+`supplier_documents`. `0004_extraction.py` (FASE 5) adds the extraction
+bookkeeping columns to `supplier_documents` and creates `extracted_fields`
+— all applied and verified against a real local PostgreSQL 16 instance, not
+just SQLite.
 
 ## Project structure
 
@@ -909,15 +1204,19 @@ backend/            # api.sourcelya.com
   app/
     api/            # FastAPI routers + dependencies (auth, DB session)
     core/           # config, database, security (JWT), logging
-    models/         # SQLAlchemy models
+    models/         # SQLAlchemy models (extracted_field.py: FASE 5 proposals)
     domain/         # pure-Python domain enums (not DB-mapped) — includes
                      # Locale (es/en), reserved for ComplianceRequest.language
     schemas/        # Pydantic schemas
     repositories/   # DB access, company-scoped by default
-    services/       # business logic (DocumentService: upload validation,
-                     # storage path convention, audit events)
+    services/       # business logic (DocumentService: upload validation;
+                     # ExtractionService: FASE 5 pipeline orchestration;
+                     # ExtractedFieldService: the only accept/reject writer)
     integrations/   # email / storage / extraction adapters behind interfaces
-                     # (storage/: SupabaseStorageService + InMemoryStorageService)
+                     # (storage/: SupabaseStorageService + InMemoryStorageService;
+                     # extraction/: StubDocumentExtractionService +
+                     # ClaudeDocumentExtractionService, document_text.py,
+                     # schema.py, pricing.py)
   alembic/          # migrations
   tests/            # fast suite (SQLite)
   tests/integration/ # `-m integration` suite (real Postgres) — see its README
@@ -970,14 +1269,23 @@ suite](#integration-suite-real-postgresql) and the `Locale` enum.
   model, and tests, and [Technical debt &
   simplifications](#technical-debt--simplifications) for what was
   deliberately kept simple. Still no OCR/LLM extraction, classification,
-  or conflict detection — that's FASE 7.
-- **FASE 5**: The real dashboard (completion percentages, missing-fields
-  counts) built on `StatusCalculationService`.
+  or conflict detection at this point.
+- **FASE 5 — done**: `ExtractedField` + a real `DocumentExtractionService`
+  implementation (Anthropic Claude) behind the existing interface —
+  document classification, evidence-backed field proposals, deterministic
+  confidence, and the company-side review UI (accept/reject/conflict
+  resolution) — see [Document extraction
+  (FASE 5)](#document-extraction-fase-5) for the full design, cost
+  rationale, security model, and tests, and [Technical debt &
+  simplifications](#technical-debt--simplifications) /
+  [Pre-production checklist](#pre-production-checklist) for what was
+  deliberately kept simple or deferred. *(Note: an earlier sketch of this
+  roadmap numbered the real dashboard/reminders/extraction work
+  differently — this section reflects how the phases actually shipped.)*
 - **FASE 6**: Resend email templates + real `ReminderService` logic behind
   the `POST /internal/jobs/process-reminders` shape already in place.
-- **FASE 7**: `ExtractedField` + a real `DocumentExtractionService`
-  implementation behind the existing interface, plus the accept/conflict UI.
-- **FASE 8**: Polish, broader test coverage, deployment readiness.
+- **FASE 7**: Polish, broader test coverage, deployment readiness — closing
+  the items on the [pre-production checklist](#pre-production-checklist).
 
 Explicitly out of scope for the MVP (see the product brief): Digital Product
 Passport, EUDR, full REACH, a supplier marketplace/network, ERP or

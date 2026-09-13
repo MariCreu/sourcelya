@@ -3,7 +3,8 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_storage_service
+from app.api.deps import get_db, get_extraction_service, get_storage_service
+from app.integrations.extraction.base import DocumentExtractionService
 from app.integrations.storage.base import StorageService
 from app.repositories.company_repository import CompanyRepository
 from app.repositories.supplier_document_repository import SupplierDocumentRepository
@@ -16,6 +17,7 @@ from app.services.document_service import (
     UnsupportedFileTypeError,
     UploadedFilePayload,
 )
+from app.services.extraction_service import ExtractionService
 from app.services.public_request_service import (
     ComponentNotInRequestError,
     InvalidTokenError,
@@ -89,6 +91,7 @@ async def upload_public_document(
     file: UploadFile,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
+    extractor: DocumentExtractionService = Depends(get_extraction_service),
 ) -> PublicComplianceRequestRead:
     try:
         request = PublicRequestService(db).resolve_token(token)
@@ -102,7 +105,7 @@ async def upload_public_document(
         content=content,
     )
     try:
-        DocumentService(db, storage).upload_for_request(request, upload)
+        document = DocumentService(db, storage).upload_for_request(request, upload)
     except RequestNotEditableError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except UnsupportedFileTypeError as exc:
@@ -111,6 +114,11 @@ async def upload_public_document(
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
         ) from exc
+
+    # Synchronous, inline extraction — see ExtractionService's module
+    # docstring for why (no job queue in this codebase) and the FASE 5
+    # report's technical-debt section for the tradeoff this accepts.
+    ExtractionService(db, extractor, storage).process(document)
     return _to_public_read(db, request)
 
 

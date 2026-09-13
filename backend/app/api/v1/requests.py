@@ -7,6 +7,7 @@ from app.api.deps import get_current_company, get_current_user, get_db, get_emai
 from app.models.company import Company
 from app.models.compliance_request import ComplianceRequest
 from app.models.user import User
+from app.repositories.extracted_field_repository import ExtractedFieldRepository
 from app.repositories.supplier_document_repository import SupplierDocumentRepository
 from app.schemas.compliance_request import (
     ComplianceRequestCreate,
@@ -29,9 +30,16 @@ def _service(db: Session, email_service: EmailService) -> ComplianceRequestServi
     return ComplianceRequestService(db, email_service)
 
 
-def _read(db: Session, request: ComplianceRequest) -> ComplianceRequestRead:
+def _read(db: Session, company_id: uuid.UUID, request: ComplianceRequest) -> ComplianceRequestRead:
     documents = SupplierDocumentRepository(db).list_for_request(request.id)
-    return ComplianceRequestRead.from_model(request, documents)
+    extracted_fields_by_document = {}
+    if documents:
+        field_repo = ExtractedFieldRepository(db)
+        for document in documents:
+            extracted_fields_by_document[document.id] = field_repo.list_for_document(
+                company_id, document.id
+            )
+    return ComplianceRequestRead.from_model(request, documents, extracted_fields_by_document)
 
 
 @router.post("", response_model=ComplianceRequestRead, status_code=status.HTTP_201_CREATED)
@@ -48,7 +56,7 @@ def create_request(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except ProductNotInSupplierError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return _read(db, request)
+    return _read(db, company.id, request)
 
 
 @router.get("", response_model=list[ComplianceRequestRead])
@@ -71,7 +79,7 @@ def get_request(
     request = _service(db, email_service).get(company.id, request_id)
     if request is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
-    return _read(db, request)
+    return _read(db, company.id, request)
 
 
 @router.post("/{request_id}/send", response_model=ComplianceRequestSendResult)
@@ -107,7 +115,7 @@ def revoke_request(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if request is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
-    return _read(db, request)
+    return _read(db, company.id, request)
 
 
 @router.post("/{request_id}/resend", response_model=ComplianceRequestSendResult)

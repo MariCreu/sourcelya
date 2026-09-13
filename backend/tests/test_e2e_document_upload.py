@@ -55,7 +55,11 @@ def test_supplier_uploads_document_and_company_downloads_it(client, auth_header,
     assert len(company_view["documents"]) == 1
     document = company_view["documents"][0]
     assert document["filename"] == "technical-datasheet.pdf"
-    assert document["extraction_status"] == "pending"  # no OCR/extraction in FASE 4
+    # FASE 5: extraction now runs inline on upload — with the default stub
+    # provider (no ANTHROPIC_API_KEY in tests) it finds no fields but still
+    # completes cleanly, never leaving the document PENDING forever.
+    assert document["extraction_status"] == "completed"
+    assert document["extracted_field_count"] == 0
 
     download = client.get(f"/api/documents/{document['id']}/download", headers=headers)
     assert download.status_code == 200

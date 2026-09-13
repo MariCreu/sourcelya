@@ -13,8 +13,13 @@ import {
   PackagingComponent,
   UpdatePackagingComponentPayload
 } from './packaging-component.models';
+import {
+  AcceptExtractedFieldPayload,
+  ExtractedField
+} from './extracted-field.models';
 import { CreateProductPayload, Product, ProductDetail, UpdateProductPayload } from './product.models';
 import { PublicComplianceRequest, SavePublicRequestPayload } from './public-request.models';
+import { SupplierDocument } from './supplier-document.models';
 import { CreateSupplierPayload, Supplier, UpdateSupplierPayload } from './supplier.models';
 
 @Injectable({ providedIn: 'root' })
@@ -158,5 +163,38 @@ export class BackendApiService {
     return this.http.get(`${this.baseUrl}/documents/${documentId}/download`, {
       responseType: 'blob'
     });
+  }
+
+  // --- FASE 5: extraction review. Never applied automatically — see
+  // ExtractedFieldService's docstring — these are the only two ways a
+  // proposal ever reaches PackagingComponent. ---
+
+  listExtractedFields(documentId: string): Observable<ExtractedField[]> {
+    return this.http.get<ExtractedField[]>(`${this.baseUrl}/documents/${documentId}/extracted-fields`);
+  }
+
+  acceptExtractedField(
+    documentId: string,
+    fieldId: string,
+    payload: AcceptExtractedFieldPayload = {}
+  ): Observable<ExtractedField> {
+    return this.http.post<ExtractedField>(
+      `${this.baseUrl}/documents/${documentId}/extracted-fields/${fieldId}/accept`,
+      payload
+    );
+  }
+
+  rejectExtractedField(documentId: string, fieldId: string): Observable<ExtractedField> {
+    return this.http.post<ExtractedField>(
+      `${this.baseUrl}/documents/${documentId}/extracted-fields/${fieldId}/reject`,
+      {}
+    );
+  }
+
+  retryExtraction(documentId: string): Observable<SupplierDocument> {
+    return this.http.post<SupplierDocument>(
+      `${this.baseUrl}/documents/${documentId}/retry-extraction`,
+      {}
+    );
   }
 }

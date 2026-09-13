@@ -109,6 +109,9 @@
               <th>{{ t().requests.detail.documentsTable.filename }}</th>
               <th>{{ t().requests.detail.documentsTable.size }}</th>
               <th>{{ t().requests.detail.documentsTable.uploadedAt }}</th>
+              <th>{{ t().requests.detail.documentsTable.type }}</th>
+              <th>{{ t().requests.detail.documentsTable.status }}</th>
+              <th>{{ t().requests.detail.documentsTable.fields }}</th>
               <th></th>
             </tr>
           </thead>
@@ -118,12 +121,135 @@
                 <td>{{ doc.filename }}</td>
                 <td>{{ formatFileSize(doc.size_bytes) }}</td>
                 <td>{{ doc.uploaded_at | date: 'medium' }}</td>
+                <td>{{ t().requests.detail.documentTypeLabels[doc.document_type] }}</td>
                 <td>
+                  <span class="status-badge {{ extractionStatusBadgeClass(doc.extraction_status) }}">
+                    {{ t().requests.detail.extractionStatusLabels[doc.extraction_status] }}
+                  </span>
+                  @if (doc.extraction_status === 'failed' && doc.processing_error) {
+                    <p class="error processing-error">
+                      {{ t().requests.detail.processingErrorPrefix }} {{ doc.processing_error }}
+                    </p>
+                  }
+                </td>
+                <td>
+                  @if (doc.extracted_field_count > 0) {
+                    {{ doc.extracted_field_count }}
+                    @if (doc.pending_review_count > 0) {
+                      <span class="status-badge status-red">{{ doc.pending_review_count }}</span>
+                    }
+                  } @else {
+                    —
+                  }
+                </td>
+                <td class="doc-actions">
                   <button type="button" class="secondary-button" (click)="downloadDocument(doc)">
                     {{ t().requests.detail.downloadButton }}
                   </button>
+                  @if (doc.extraction_status === 'failed') {
+                    <button
+                      type="button"
+                      class="secondary-button"
+                      [disabled]="retryingDocumentId() === doc.id"
+                      (click)="retryExtraction(doc)"
+                    >
+                      {{ retryingDocumentId() === doc.id ? t().requests.detail.retrying : t().requests.detail.retryButton }}
+                    </button>
+                  }
+                  @if (doc.extracted_field_count > 0) {
+                    <button type="button" class="secondary-button" (click)="toggleFields(doc)">
+                      {{ isExpanded(doc) ? t().requests.detail.hideFieldsButton : t().requests.detail.viewFieldsButton }}
+                    </button>
+                  }
                 </td>
               </tr>
+              @if (isExpanded(doc)) {
+                <tr class="extracted-fields-row">
+                  <td colspan="7">
+                    @if (loadingFieldsDocumentId() === doc.id) {
+                      <p class="muted">{{ t().requests.loading }}</p>
+                    } @else {
+                      <div class="extracted-fields-panel">
+                        <h3>{{ t().requests.detail.extractedInformationHeading }}</h3>
+                        @if (extractedFieldsFor(doc).length === 0) {
+                          <p class="muted">{{ t().requests.detail.noExtractedFields }}</p>
+                        } @else {
+                          @for (field of extractedFieldsFor(doc); track field.id) {
+                            <div class="extracted-field-item">
+                              <div class="extracted-field-header">
+                                <strong>{{ fieldLabel(field.field_name) }}</strong>
+                                <span class="status-badge {{ confidenceBadgeClass(field.confidence) }}">
+                                  {{ t().requests.detail.confidenceLabels[field.confidence] }}
+                                </span>
+                                @if (field.review_status !== 'pending') {
+                                  <span class="status-badge status-green">
+                                    {{ t().requests.detail.reviewedLabel }}: {{ field.review_status }}
+                                  </span>
+                                }
+                              </div>
+                              <p class="extracted-field-value">{{ field.extracted_value }}</p>
+                              <p class="extracted-field-source muted">
+                                {{ t().requests.detail.sourcePrefix }} {{ doc.filename }}
+                                @if (field.source_page !== null) {
+                                  · {{ t().requests.detail.pagePrefix }} {{ field.source_page }}
+                                }
+                                @if (!field.quote_verified) {
+                                  {{ t().requests.detail.unverifiedEvidence }}
+                                }
+                              </p>
+
+                              @if (conflictFor(field); as conflict) {
+                                <div class="conflict-box">
+                                  <p class="conflict-title">{{ t().requests.detail.conflictTitle }}</p>
+                                  <p>{{ t().requests.detail.conflictCurrentLabel }} {{ conflict.current_value }}</p>
+                                  <p>{{ t().requests.detail.conflictExtractedLabel }} {{ conflict.extracted_value }}</p>
+                                  <div class="doc-actions">
+                                    <button
+                                      type="button"
+                                      class="secondary-button"
+                                      [disabled]="reviewingFieldId() === field.id"
+                                      (click)="accept(doc, field, 'use_extracted')"
+                                    >
+                                      {{ t().requests.detail.useExtractedButton }}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      class="secondary-button"
+                                      [disabled]="reviewingFieldId() === field.id"
+                                      (click)="accept(doc, field, 'keep_current')"
+                                    >
+                                      {{ t().requests.detail.keepCurrentButton }}
+                                    </button>
+                                  </div>
+                                </div>
+                              } @else if (field.review_status === 'pending') {
+                                <div class="doc-actions">
+                                  <button
+                                    type="button"
+                                    class="cta-primary"
+                                    [disabled]="reviewingFieldId() === field.id"
+                                    (click)="accept(doc, field)"
+                                  >
+                                    {{ reviewingFieldId() === field.id ? t().requests.detail.accepting : t().requests.detail.acceptButton }}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    class="secondary-button"
+                                    [disabled]="reviewingFieldId() === field.id"
+                                    (click)="reject(doc, field)"
+                                  >
+                                    {{ reviewingFieldId() === field.id ? t().requests.detail.rejecting : t().requests.detail.rejectButton }}
+                                  </button>
+                                </div>
+                              }
+                            </div>
+                          }
+                        }
+                      </div>
+                    }
+                  </td>
+                </tr>
+              }
             }
           </tbody>
         </table>

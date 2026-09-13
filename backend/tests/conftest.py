@@ -14,13 +14,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_db, get_email_service
+from app.api.deps import get_db, get_email_service, get_extraction_service
 from app.core.config import get_settings
 from app.core.database import Base
 from app.core.security import get_token_verifier
 from app.main import app
 from app.services.email_service import EmailService
-from tests.fakes import RecordingEmailSender
+from tests.fakes import FakeDocumentExtractionService, RecordingEmailSender
 
 get_settings.cache_clear()
 get_token_verifier.cache_clear()
@@ -112,3 +112,18 @@ def recording_email_sender():
         yield sender
     finally:
         del app.dependency_overrides[get_email_service]
+
+
+@pytest.fixture
+def fake_extraction_service():
+    """Overrides the extraction dependency so uploads never call a real,
+    paid LLM in the fast suite — set `.result`/`.error` on the returned
+    fake before each upload to control what that call returns (see
+    tests/fakes.py).
+    """
+    service = FakeDocumentExtractionService()
+    app.dependency_overrides[get_extraction_service] = lambda: service
+    try:
+        yield service
+    finally:
+        del app.dependency_overrides[get_extraction_service]
