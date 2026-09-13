@@ -22,6 +22,15 @@ class SupabaseStorageService(StorageService):
         response.raise_for_status()
         return path
 
+    def download(self, *, path: str) -> bytes:
+        response = httpx.get(
+            f"{self._base_url}/object/{self._bucket}/{path}",
+            headers=self._headers,
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return response.content
+
     def create_signed_url(self, *, path: str, expires_in_seconds: int = 3600) -> str:
         response = httpx.post(
             f"{self._base_url}/object/sign/{self._bucket}/{path}",

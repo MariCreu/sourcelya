@@ -95,5 +95,39 @@
         </tbody>
       </table>
     </div>
+
+    <h2>{{ t().requests.detail.documentsHeading }}</h2>
+    @if (request()!.documents.length === 0) {
+      <div class="empty-state">
+        <p class="muted">{{ t().requests.detail.noDocuments }}</p>
+      </div>
+    } @else {
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>{{ t().requests.detail.documentsTable.filename }}</th>
+              <th>{{ t().requests.detail.documentsTable.size }}</th>
+              <th>{{ t().requests.detail.documentsTable.uploadedAt }}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (doc of request()!.documents; track doc.id) {
+              <tr>
+                <td>{{ doc.filename }}</td>
+                <td>{{ formatFileSize(doc.size_bytes) }}</td>
+                <td>{{ doc.uploaded_at | date: 'medium' }}</td>
+                <td>
+                  <button type="button" class="secondary-button" (click)="downloadDocument(doc)">
+                    {{ t().requests.detail.downloadButton }}
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
   }
 </main>

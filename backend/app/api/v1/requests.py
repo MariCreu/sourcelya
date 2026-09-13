@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_company, get_current_user, get_db, get_email_service
 from app.models.company import Company
+from app.models.compliance_request import ComplianceRequest
 from app.models.user import User
+from app.repositories.supplier_document_repository import SupplierDocumentRepository
 from app.schemas.compliance_request import (
     ComplianceRequestCreate,
     ComplianceRequestRead,
@@ -27,6 +29,11 @@ def _service(db: Session, email_service: EmailService) -> ComplianceRequestServi
     return ComplianceRequestService(db, email_service)
 
 
+def _read(db: Session, request: ComplianceRequest) -> ComplianceRequestRead:
+    documents = SupplierDocumentRepository(db).list_for_request(request.id)
+    return ComplianceRequestRead.from_model(request, documents)
+
+
 @router.post("", response_model=ComplianceRequestRead, status_code=status.HTTP_201_CREATED)
 def create_request(
     payload: ComplianceRequestCreate,
@@ -41,7 +48,7 @@ def create_request(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except ProductNotInSupplierError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return ComplianceRequestRead.from_model(request)
+    return _read(db, request)
 
 
 @router.get("", response_model=list[ComplianceRequestRead])
@@ -51,7 +58,7 @@ def list_requests(
     email_service: EmailService = Depends(get_email_service),
 ) -> list[ComplianceRequestRead]:
     requests = _service(db, email_service).list(company.id)
-    return [ComplianceRequestRead.from_model(request) for request in requests]
+    return [_read(db, request) for request in requests]
 
 
 @router.get("/{request_id}", response_model=ComplianceRequestRead)
@@ -64,7 +71,7 @@ def get_request(
     request = _service(db, email_service).get(company.id, request_id)
     if request is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
-    return ComplianceRequestRead.from_model(request)
+    return _read(db, request)
 
 
 @router.post("/{request_id}/send", response_model=ComplianceRequestSendResult)
@@ -82,7 +89,8 @@ def send_request(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
     request, request_url = result
-    return ComplianceRequestSendResult.from_model(request, request_url)
+    documents = SupplierDocumentRepository(db).list_for_request(request.id)
+    return ComplianceRequestSendResult.from_model(request, request_url, documents)
 
 
 @router.post("/{request_id}/revoke", response_model=ComplianceRequestRead)
@@ -99,7 +107,7 @@ def revoke_request(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if request is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
-    return ComplianceRequestRead.from_model(request)
+    return _read(db, request)
 
 
 @router.post("/{request_id}/resend", response_model=ComplianceRequestSendResult)
@@ -117,4 +125,5 @@ def resend_request(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
     request, request_url = result
-    return ComplianceRequestSendResult.from_model(request, request_url)
+    documents = SupplierDocumentRepository(db).list_for_request(request.id)
+    return ComplianceRequestSendResult.from_model(request, request_url, documents)

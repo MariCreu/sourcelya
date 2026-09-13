@@ -11,10 +11,10 @@ marketing copy (tagline, one-line explanation) lives in one place —
 > Sourcelya helps you collect and organise supplier documentation. It does
 > not constitute legal advice and does not guarantee regulatory compliance.
 
-This repository currently implements **FASE 1–3** of the roadmap:
+This repository currently implements **FASE 1–4** of the roadmap:
 architecture, database schema, authentication, the Suppliers/Products
-catalog, and now the first genuinely critical flow — a company sending a
-supplier a secure, no-login-required link to fill in packaging data. See
+catalog, the secure no-login-required supplier request flow, and now the
+supplier attaching real documents to that request. See
 [Roadmap](#roadmap) below for what's next.
 
 ## Product positioning
@@ -87,7 +87,15 @@ into a local `users` row on first authenticated call. Company onboarding
 for AI/OCR. Today it's `StubDocumentExtractionService`, which returns no
 suggestions — see product rationale below. Swapping in a real LLM/OCR provider
 later means writing one new adapter class, nothing else in the codebase
-changes.
+changes. FASE 4 introduces `SupplierDocument` with `extraction_status =
+PENDING` and nothing that ever moves it out of that state yet — see
+[Document uploads](#document-uploads-fase-4) below.
+
+**Storage**: same adapter-behind-an-interface pattern as email —
+`StorageService` (`app/integrations/storage/base.py`), with
+`SupabaseStorageService` for production and `InMemoryStorageService` as the
+local/test fallback when no Supabase project is configured. See [Document
+uploads](#document-uploads-fase-4).
 
 ### JWT verification
 
@@ -254,8 +262,9 @@ site's `content/*.json`, just applied at runtime instead of build time.
 onboarding step (dashboard's company-creation form) — the exact minimal
 journey a first Spanish customer walks through — plus the FASE 2 screens
 (Suppliers, Products, product detail/packaging-components, including the
-status badges and packaging-type labels) and, new this phase, the FASE 3
-Requests screens (list/new/detail) through the same `LocaleService`.
+status badges and packaging-type labels) and the FASE 3 Requests screens
+(list/new/detail) through the same `LocaleService` — now extended with the
+FASE 4 documents list/download strings on the company side.
 
 The **public supplier portal is a special case**: it must speak
 `ComplianceRequest.language` (chosen once by the company, e.g. a Spanish
@@ -265,7 +274,8 @@ logs in has no relationship to the authenticated app's locale switcher at
 all. `PublicRequestComponent` reads straight from `DICTIONARIES[language]`
 by that field, bypassing `LocaleService` entirely, and has its own small
 `publicRequest` dictionary section (heading, field labels, save/submit
-copy, error states) rather than reusing the authenticated app's strings.
+copy, error states, and now upload/delete copy for FASE 4) rather than
+reusing the authenticated app's strings.
 
 **Deliberately left in English**: the post-onboarding dashboard body
 (product-count stats, the empty-state message) — it existed before this
@@ -323,11 +333,22 @@ immediately redo the model. See `backend/app/models/`:
   authenticated user exists there); `metadata_json` is generic `JSON` on
   SQLite, `JSONB` on Postgres, same pattern as elsewhere in this codebase.
 
-Still deliberately **not** modelled (each ships in its own later phase):
-`SupplierDocument` (FASE 4), `ExtractedField` (FASE 7). When they're added,
-they keep the design decisions already agreed for them — full extraction
-provenance (document/page/quoted text), `VARCHAR` instead of native enums
-for evolving fields.
+- **`SupplierDocument`** (FASE 4) — a file the supplier attached, today
+  always through the public portal for a specific `ComplianceRequest`
+  (`supplier_id`/`product_id`/`request_id` are all independently nullable,
+  so a later phase can attach a document without going through a request).
+  `content_type` stores Sourcelya's own canonical MIME type for the
+  validated extension, never whatever the browser claimed — see [Document
+  uploads](#document-uploads-fase-4). `document_type` (`DocumentType` enum,
+  `OTHER` for everything today) and `extraction_status` (`ExtractionStatus`
+  enum, always `PENDING`) exist now so FASE 7's classifier/extractor have
+  somewhere to write without a schema change, without either one doing
+  anything yet.
+
+Still deliberately **not** modelled: `ExtractedField` (FASE 7). When it's
+added, it keeps the design decisions already agreed for it — full
+extraction provenance (document/page/quoted text), `VARCHAR` instead of a
+native enum for `entity_type`.
 
 Notable implementation detail: **UUID columns use a small custom `GUID`
 type** (`app/models/base.py`) instead of `postgresql.UUID` directly, so the
@@ -364,6 +385,9 @@ ones:
 | `REMINDER_SCHEDULE_DAYS` | Centralized reminder cadence — never hardcode this elsewhere |
 | `RESEND_API_KEY` | Leave empty locally: emails are logged instead of sent |
 | `DOCUMENT_EXTRACTION_PROVIDER` | `stub` today; a real provider plugs in behind `DocumentExtractionService` |
+| `MAX_UPLOAD_SIZE_MB` | Supplier document upload size ceiling (default 20) — see [Document uploads](#document-uploads-fase-4) |
+| `ALLOWED_UPLOAD_EXTENSIONS` | Accepted document extensions (default `pdf,xlsx,csv,docx,png,jpg,jpeg`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Required (with `SUPABASE_URL`) for real Supabase Storage; otherwise documents use the in-memory fallback |
 | `INTEGRATION_DATABASE_URL` | Optional override for `pytest -m integration`; defaults to the `docker-compose.yml` Postgres credentials |
 
 If you don't have a Supabase project yet, set `SUPABASE_JWT_STRATEGY=hs256`
@@ -436,18 +460,24 @@ POST   /api/requests/{id}/resend                               # mints a NEW tok
 GET    /api/public/requests/{token}                            # no auth — the token IS the credential
 PATCH  /api/public/requests/{token}                            # save progress
 POST   /api/public/requests/{token}/submit
+POST   /api/public/requests/{token}/documents                 # upload (multipart/form-data, field "file")
+DELETE /api/public/requests/{token}/documents/{document_id}
+
+GET    /api/documents/{document_id}/download                  # authenticated, company-scoped
 
 POST   /api/internal/jobs/process-reminders                  # shared-secret, not user auth
 ```
 
-Every `suppliers`/`products`/`requests` route requires a
+Every `suppliers`/`products`/`requests`/`documents` route requires a
 Supabase-authenticated user with a company (`get_current_company`);
 responses are always scoped to that company. `Product` and
 `PackagingComponent` responses include a computed `status` (and
 `missing_fields` for components) from `StatusCalculationService` — see
 [Computed status, not cached](#computed-status-not-cached). The
 `/api/public/requests/*` routes take **no** auth dependency at all — see
-[Public supplier portal](#public-supplier-portal).
+[Public supplier portal](#public-supplier-portal). `ComplianceRequestRead`/
+`PublicComplianceRequestRead` both carry a `documents[]` array now — see
+[Document uploads](#document-uploads-fase-4).
 
 ### Public supplier portal
 
@@ -502,6 +532,85 @@ start to finish, through the real HTTP API: create supplier/product →
 create request → send → parse the emailed URL → open as the supplier →
 save progress → submit → confirm the company sees `SUBMITTED` with the
 supplier-provided data attached.
+
+### Document uploads (FASE 4)
+
+The FASE 4 target: *"Sourcelya can now receive real documentation from a
+supplier."* No OCR, no LLM extraction, no automatic classification — just
+getting the file from the supplier's browser into storage and in front of
+the company, safely.
+
+**Storage strategy**: `StorageService` (`app/integrations/storage/base.py`)
+has three methods — `upload`, `download`, `delete` — implemented by
+`SupabaseStorageService` (production, talks to the Supabase Storage REST
+API with the service-role key) and `InMemoryStorageService` (local
+dev/tests, a process-lifetime dict — the same role `ConsoleEmailSender`
+plays for email). `get_storage_service()`
+(`app/integrations/storage/factory.py`) picks whichever one applies based
+on whether `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` are set — a config
+change, not a code change, same pattern as the email factory. Downloads go
+**through the backend** (`GET /api/documents/{id}/download` reads the
+bytes via `StorageService.download` and streams them back with the right
+`Content-Type`/`Content-Disposition`) rather than redirecting the browser
+to a Supabase signed URL — one code path behaves identically in tests,
+local dev, and production, and the company's auth check happens on every
+download, not just once when a signed URL was minted.
+
+Storage path convention (decided back in FASE 1, implemented now):
+`companies/{company_id}/requests/{request_id}/{document_id}.{extension}`
+— the **document's own id**, generated up front, not the user-supplied
+filename, so there is no path-traversal or collision surface from
+attacker-controlled input. The original filename is kept only as metadata
+(`SupplierDocument.filename`) for display and the download's
+`Content-Disposition`.
+
+**Validations** (`DocumentService._validate`,
+`app/services/document_service.py`): extension against
+`Settings.allowed_upload_extensions` (`pdf`, `xlsx`, `csv`, `docx`, `png`,
+`jpg`/`jpeg` — already configured back in FASE 1, unused until now);
+declared `Content-Type` checked against a per-extension allow-list
+(`EXTENSION_MIME_TYPES`), tolerating the generic
+`application/octet-stream` some browsers send instead of a real MIME type;
+size against `Settings.max_upload_size_mb` (also an existing FASE 1
+setting). Critically, **the client-declared Content-Type is only ever
+checked, never stored or replayed** — `SupplierDocument.content_type`
+holds Sourcelya's own canonical MIME type for the validated extension, so
+`GET /api/documents/{id}/download` can never be made to serve a file back
+with an attacker-chosen `Content-Type` (e.g. `text/html`, inviting a
+stored-XSS-via-download scenario).
+
+**Portal side** (`POST`/`DELETE .../documents`, both resolving the token
+through the same `PublicRequestService.resolve_token` every other
+public-portal action uses — no separate validation path to keep in sync):
+upload and delete are both rejected once the request is `SUBMITTED` or
+`COMPLETED` (`RequestNotEditableError`, 409) — see the spec's "subir y
+eliminar antes de submit". Delete additionally re-checks that the
+`document_id` belongs to *this specific* `request_id`
+(`SupplierDocumentRepository.get_for_request`) — a document id from a
+different request (even one the same supplier owns) is a 404, not a
+silent no-op.
+
+**Company side**: `ComplianceRequestRead`/`PublicComplianceRequestRead`
+both got a `documents: []` field rather than a separate list endpoint —
+the request detail screen a company already fetches is where its
+documents belong. `GET /api/documents/{id}/download` is the one dedicated
+endpoint, company-scoped via the same `CompanyScopedRepository.get`
+pattern as everything else.
+
+Audit events: `DOCUMENT_UPLOADED`/`DOCUMENT_DELETED`, recorded by the same
+`AuditService.record()` every other FASE 3/4 action uses.
+
+`backend/tests/test_document_service.py` unit-tests the validation logic
+directly (disallowed extension, mismatched MIME, oversized file, rejected
+after submit) without going through HTTP.
+`backend/tests/test_documents.py` covers the HTTP/isolation surface:
+invalid token, cross-request document deletion rejected, upload/delete
+rejected after submit, a company can only download its own documents
+(another company's `GET` on the same `document_id` is a 404), and both
+audit events actually land in the table.
+`backend/tests/test_e2e_document_upload.py` runs the whole thing through
+the real HTTP API: supplier opens the request → uploads a PDF → submits →
+company downloads it and gets back the exact same bytes.
 
 ### Frontend
 
@@ -571,6 +680,10 @@ public supplier link:
 - `test_e2e_request_flow.py` — the full request lifecycle in one real
   HTTP-API test, company to supplier and back (see [Public supplier
   portal](#public-supplier-portal) for what it covers).
+- `test_document_service.py` / `test_documents.py` /
+  `test_e2e_document_upload.py` — document upload validation, cross-request/
+  cross-company isolation, audit events, and the full upload → submit →
+  download lifecycle (see [Document uploads](#document-uploads-fase-4)).
 
 ### Integration suite (real PostgreSQL)
 
@@ -663,6 +776,28 @@ involved), run in an actual Chromium browser via Playwright:
    not valid" message — no app chrome, no stack trace, no hint of what a
    valid token would look like.
 
+**FASE 4**, same setup, on top of a freshly sent request:
+
+1. On the public portal, choosing a disallowed file (`.exe`) shows "Ese
+   tipo de archivo no está permitido" inline — the request is rejected by
+   the backend (400), nothing gets uploaded, and the documents list stays
+   empty.
+2. Choosing an allowed file (`.pdf`) uploads it immediately — no separate
+   "confirm upload" step — and it appears in the documents list with its
+   filename and size, plus an "Eliminar" button (since the request isn't
+   submitted yet).
+3. "Enviar solicitud" → the confirmation view, upload/delete controls
+   gone, the document still listed (read-only) as proof it survived
+   submission.
+4. Back on the authenticated side, the request detail page now has a
+   "Documentos recibidos" section with the same file, its size, and when
+   it was uploaded, plus a "Descargar" button.
+5. Clicking "Descargar" triggers a real browser download (via a
+   fetched Blob + a synthetic anchor click, since the auth interceptor
+   can't attach a bearer token to a plain link navigation) — the
+   downloaded file's bytes were compared against the original fixture
+   file and matched exactly.
+
 ## Technical debt & simplifications
 
 Decisions made during FASE 3 to keep the scope to "close the request loop,
@@ -708,6 +843,36 @@ justifies it:
   scheduler](#why-not-an-in-process-scheduler-for-jobs)); real reminder
   logic is FASE 6.
 
+FASE 4:
+
+- **`InMemoryStorageService` doesn't survive a restart or scale past one
+  process.** Fine for local dev and the test suite (same tradeoff as
+  `ConsoleEmailSender`); production always needs `SUPABASE_URL`/
+  `SUPABASE_SERVICE_ROLE_KEY` set so `SupabaseStorageService` is used
+  instead — see [Document uploads](#document-uploads-fase-4).
+  `SupabaseStorageService` itself is exercised by unit-style validation
+  tests and the real-Supabase-shaped path, but not by an integration test
+  against a real Supabase Storage bucket — no such bucket exists in this
+  environment.
+- **`document_type` is always `OTHER`.** There is no type picker in the
+  upload form and no classifier yet (that's explicitly FASE 7's job) — the
+  column exists so a future classifier has somewhere to write its answer
+  without a schema change, but nothing populates it today.
+- **Downloads are read in full into memory** (`StorageService.download`
+  returns `bytes`, not a stream) before being returned. Acceptable at the
+  `max_upload_size_mb` ceiling this MVP enforces (20MB default); would need
+  to switch to a streaming response if that ceiling ever grows
+  substantially.
+- **No virus/malware scanning.** Validation is extension + declared MIME
+  type + size only, exactly what the FASE 4 spec asked for ("validación
+  MIME/extensión") — a real content-sniffing or antivirus pass is not
+  attempted, and isn't currently planned for a specific later phase either.
+- **The company side has no delete.** The spec's explicit bullet list says
+  "listar y descargar documentos recibidos" for the company — deleting a
+  supplier's upload is something only the supplier can do (and only before
+  submit), matching a paper-trail mental model where the company shouldn't
+  be able to make a received document disappear.
+
 ## Migrations
 
 [Alembic](https://alembic.sqlalchemy.org/), driven from `backend/alembic/`.
@@ -726,8 +891,9 @@ migrations before applying — autogenerate can miss some constraint renames.
 FASE 2 added no new tables (Supplier/Product/PackagingComponent were already
 part of `0001_initial_schema.py`). `0002_compliance_requests.py` (FASE 3)
 adds `compliance_requests`, `compliance_request_products`, and
-`audit_events` — applied and verified against a real local PostgreSQL 16
-instance, not just SQLite.
+`audit_events`. `0003_supplier_documents.py` (FASE 4) adds
+`supplier_documents` — all applied and verified against a real local
+PostgreSQL 16 instance, not just SQLite.
 
 ## Project structure
 
@@ -748,8 +914,10 @@ backend/            # api.sourcelya.com
                      # Locale (es/en), reserved for ComplianceRequest.language
     schemas/        # Pydantic schemas
     repositories/   # DB access, company-scoped by default
-    services/       # business logic
+    services/       # business logic (DocumentService: upload validation,
+                     # storage path convention, audit events)
     integrations/   # email / storage / extraction adapters behind interfaces
+                     # (storage/: SupabaseStorageService + InMemoryStorageService)
   alembic/          # migrations
   tests/            # fast suite (SQLite)
   tests/integration/ # `-m integration` suite (real Postgres) — see its README
@@ -795,8 +963,14 @@ suite](#integration-suite-real-postgresql) and the `Locale` enum.
   tests, and [Technical debt &
   simplifications](#technical-debt--simplifications) for what was
   deliberately kept simple.
-- **FASE 4**: `SupplierDocument` + document uploads (Supabase Storage,
-  upload validation).
+- **FASE 4 — done**: `SupplierDocument`; document uploads from the public
+  portal (Supabase Storage in production, an in-memory fallback locally),
+  extension/MIME/size validation, company-side listing and download — see
+  [Document uploads](#document-uploads-fase-4) for the full flow, security
+  model, and tests, and [Technical debt &
+  simplifications](#technical-debt--simplifications) for what was
+  deliberately kept simple. Still no OCR/LLM extraction, classification,
+  or conflict detection — that's FASE 7.
 - **FASE 5**: The real dashboard (completion percentages, missing-fields
   counts) built on `StatusCalculationService`.
 - **FASE 6**: Resend email templates + real `ReminderService` logic behind

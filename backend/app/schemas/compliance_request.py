@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 
 from app.domain.enums import Locale
 from app.models.compliance_request import ComplianceRequest
+from app.models.supplier_document import SupplierDocument
+from app.schemas.supplier_document import SupplierDocumentRead
 
 
 class ComplianceRequestCreate(BaseModel):
@@ -35,9 +37,12 @@ class ComplianceRequestRead(BaseModel):
     # never turned back into a URL after that, so this is always None here.
     has_active_link: bool
     products: list[ComplianceRequestProductRead]
+    documents: list[SupplierDocumentRead]
 
     @classmethod
-    def from_model(cls, request: ComplianceRequest) -> "ComplianceRequestRead":
+    def from_model(
+        cls, request: ComplianceRequest, documents: list[SupplierDocument] = ()
+    ) -> "ComplianceRequestRead":
         return cls(
             id=request.id,
             company_id=request.company_id,
@@ -61,6 +66,7 @@ class ComplianceRequestRead(BaseModel):
                 )
                 for rp in request.products
             ],
+            documents=[SupplierDocumentRead.from_model(document) for document in documents],
         )
 
 
@@ -74,5 +80,12 @@ class ComplianceRequestSendResult(BaseModel):
     request_url: str
 
     @classmethod
-    def from_model(cls, request: ComplianceRequest, request_url: str) -> "ComplianceRequestSendResult":
-        return cls(request=ComplianceRequestRead.from_model(request), request_url=request_url)
+    def from_model(
+        cls,
+        request: ComplianceRequest,
+        request_url: str,
+        documents: list[SupplierDocument] = (),
+    ) -> "ComplianceRequestSendResult":
+        return cls(
+            request=ComplianceRequestRead.from_model(request, documents), request_url=request_url
+        )

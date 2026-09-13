@@ -9,6 +9,7 @@ import {
   PublicComplianceRequest,
   PublicPackagingComponentUpdate
 } from '../../core/services/public-request.models';
+import { formatFileSize } from '../../core/util/format-file-size';
 
 type LoadError = 'invalid' | 'expired' | 'revoked' | 'generic';
 
@@ -45,6 +46,10 @@ export class PublicRequestComponent implements OnInit {
   submitting = signal(false);
   saveMessage = signal<string | null>(null);
   actionError = signal<string | null>(null);
+
+  uploading = signal(false);
+  deletingDocumentId = signal<string | null>(null);
+  uploadError = signal<string | null>(null);
 
   readonly pt = computed(
     () => DICTIONARIES[this.request()?.language ?? 'es'].publicRequest
@@ -162,6 +167,54 @@ export class PublicRequestComponent implements OnInit {
       error: () => {
         this.actionError.set(this.pt().genericError);
         this.submitting.set(false);
+      }
+    });
+  }
+
+  formatFileSize(bytes: number): string {
+    return formatFileSize(bytes);
+  }
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // allow re-selecting the same file later
+    if (!file) return;
+
+    this.uploading.set(true);
+    this.uploadError.set(null);
+    this.api.uploadPublicDocument(this.token, file).subscribe({
+      next: (request) => {
+        this.request.set(request);
+        this.uploading.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        if (err.status === 400) {
+          this.uploadError.set(this.pt().uploadErrorUnsupportedType);
+        } else if (err.status === 413) {
+          this.uploadError.set(this.pt().uploadErrorTooLarge);
+        } else {
+          this.uploadError.set(this.pt().genericError);
+        }
+        this.uploading.set(false);
+      }
+    });
+  }
+
+  deleteDocument(documentId: string): void {
+    if (!confirm(this.pt().confirmDelete)) {
+      return;
+    }
+    this.deletingDocumentId.set(documentId);
+    this.uploadError.set(null);
+    this.api.deletePublicDocument(this.token, documentId).subscribe({
+      next: (request) => {
+        this.request.set(request);
+        this.deletingDocumentId.set(null);
+      },
+      error: () => {
+        this.uploadError.set(this.pt().genericError);
+        this.deletingDocumentId.set(null);
       }
     });
   }

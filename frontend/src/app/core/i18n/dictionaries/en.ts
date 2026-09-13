@@ -212,7 +212,15 @@ export const en: Dictionary = {
       copiedLabel: 'Copied!',
       noActiveLink: 'No link has been sent to this supplier yet.',
       notFoundError: 'Could not load this request.',
-      actionError: 'Could not complete that action. Please try again.'
+      actionError: 'Could not complete that action. Please try again.',
+      documentsHeading: 'Documents received',
+      noDocuments: 'The supplier has not attached any documents yet.',
+      downloadButton: 'Download',
+      documentsTable: {
+        filename: 'File',
+        size: 'Size',
+        uploadedAt: 'Uploaded'
+      }
     }
   },
 
@@ -241,6 +249,17 @@ export const en: Dictionary = {
     submitConfirm: 'Submit this request? You can still view it afterwards, but not edit it.',
     alreadySubmittedTitle: 'Request submitted',
     alreadySubmittedBody: 'Thank you. This request has already been submitted to the company.',
-    poweredBy: 'Managed with Sourcelya'
+    poweredBy: 'Managed with Sourcelya',
+    documentsHeading: 'Documents',
+    documentsHint:
+      'Attach technical datasheets, declarations, or other relevant documentation (PDF, XLSX, CSV, DOCX, PNG, JPG).',
+    noDocuments: 'You have not attached any documents yet.',
+    uploadButton: 'Attach document',
+    uploading: 'Uploading…',
+    deleteButton: 'Delete',
+    deleting: 'Deleting…',
+    confirmDelete: 'Delete this document?',
+    uploadErrorUnsupportedType: 'That file type is not accepted.',
+    uploadErrorTooLarge: 'The file exceeds the maximum allowed size.'
   }
 };

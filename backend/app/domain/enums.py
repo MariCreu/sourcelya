@@ -85,9 +85,9 @@ class RequestStatus(str, Enum):
 
 class AuditEventType(str, Enum):
     """What gets recorded in `AuditEvent.event_type`. Expected to grow as
-    later phases add more auditable actions (document uploads, reminders,
-    extracted-field decisions, ...) — VARCHAR, not a native enum, for the
-    same reason as `PackagingType`.
+    later phases add more auditable actions (reminders, extracted-field
+    decisions, ...) — VARCHAR, not a native enum, for the same reason as
+    `PackagingType`.
     """
 
     REQUEST_CREATED = "request_created"
@@ -97,3 +97,29 @@ class AuditEventType(str, Enum):
     REQUEST_SUBMITTED = "request_submitted"
     TOKEN_REVOKED = "token_revoked"
     EMAIL_RESENT = "email_resent"
+    DOCUMENT_UPLOADED = "document_uploaded"
+    DOCUMENT_DELETED = "document_deleted"
+
+
+class DocumentType(str, Enum):
+    """Business classification of a `SupplierDocument`. FASE 4 has no UI or
+    logic that ever sets anything other than `OTHER` — there is no document
+    classifier yet (that's FASE 7's `DocumentExtractionService`) and no type
+    picker in the upload form, on purpose (see the product spec's explicit
+    "no clasificación automática todavía"). The column and this enum exist
+    now so a future classifier has somewhere to write its answer without a
+    schema change.
+    """
+
+    OTHER = "other"
+
+
+class ExtractionStatus(str, Enum):
+    """`SupplierDocument.extraction_status`. Every document is created with
+    `PENDING` and nothing moves it out of that state until FASE 7 wires up
+    a real `DocumentExtractionService` implementation — see that module's
+    docstring. Deliberately only one member for now rather than
+    pre-declaring FASE 7's states speculatively.
+    """
+
+    PENDING = "pending"

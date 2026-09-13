@@ -1,3 +1,5 @@
+import { SupplierDocument } from './supplier-document.models';
+
 // Mirrors backend app/domain/enums.py RequestStatus — VARCHAR-backed on
 // purpose there, so kept as a plain string union here rather than a
 // generated enum.
@@ -32,6 +34,7 @@ export interface ComplianceRequest {
   completed_at: string | null;
   has_active_link: boolean;
   products: ComplianceRequestProductSummary[];
+  documents: SupplierDocument[];
 }
 
 export interface CreateComplianceRequestPayload {

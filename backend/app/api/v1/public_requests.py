@@ -1,9 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_storage_service
+from app.integrations.storage.base import StorageService
 from app.repositories.company_repository import CompanyRepository
+from app.repositories.supplier_document_repository import SupplierDocumentRepository
 from app.schemas.public_request import PublicComplianceRequestRead, PublicSaveRequestPayload
+from app.services.document_service import (
+    DocumentNotFoundError,
+    DocumentService,
+    FileTooLargeError,
+    RequestNotEditableError,
+    UnsupportedFileTypeError,
+    UploadedFilePayload,
+)
 from app.services.public_request_service import (
     ComponentNotInRequestError,
     InvalidTokenError,
@@ -18,21 +30,32 @@ router = APIRouter(prefix="/public/requests", tags=["public-requests"])
 
 def _to_public_read(db: Session, request) -> PublicComplianceRequestRead:
     company = CompanyRepository(db).get_by_id(request.company_id)
-    return PublicComplianceRequestRead.from_model(request, company.name)
+    documents = SupplierDocumentRepository(db).list_for_request(request.id)
+    return PublicComplianceRequestRead.from_model(request, company.name, documents)
+
+
+def _token_error_response(exc: Exception) -> HTTPException:
+    """The three ways `PublicRequestService`/`resolve_token` can reject a
+    token, mapped to HTTP status once so every token-scoped endpoint below
+    (get/save/submit/upload/delete) reports them the same way.
+    """
+    if isinstance(exc, InvalidTokenError):
+        return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found")
+    if isinstance(exc, TokenExpiredError):
+        return HTTPException(status_code=status.HTTP_410_GONE, detail="This link has expired")
+    if isinstance(exc, TokenRevokedError):
+        return HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="This link has been revoked"
+        )
+    raise AssertionError(f"not a token error: {exc!r}")
 
 
 @router.get("/{token}", response_model=PublicComplianceRequestRead)
 def get_public_request(token: str, db: Session = Depends(get_db)) -> PublicComplianceRequestRead:
     try:
         request = PublicRequestService(db).get_by_token(token)
-    except InvalidTokenError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found") from exc
-    except TokenExpiredError as exc:
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="This link has expired") from exc
-    except TokenRevokedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="This link has been revoked"
-        ) from exc
+    except (InvalidTokenError, TokenExpiredError, TokenRevokedError) as exc:
+        raise _token_error_response(exc) from exc
     return _to_public_read(db, request)
 
 
@@ -42,14 +65,8 @@ def save_public_request(
 ) -> PublicComplianceRequestRead:
     try:
         request = PublicRequestService(db).save_progress(token, payload)
-    except InvalidTokenError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found") from exc
-    except TokenExpiredError as exc:
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="This link has expired") from exc
-    except TokenRevokedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="This link has been revoked"
-        ) from exc
+    except (InvalidTokenError, TokenExpiredError, TokenRevokedError) as exc:
+        raise _token_error_response(exc) from exc
     except ComponentNotInRequestError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RequestAlreadySubmittedError as exc:
@@ -61,12 +78,58 @@ def save_public_request(
 def submit_public_request(token: str, db: Session = Depends(get_db)) -> PublicComplianceRequestRead:
     try:
         request = PublicRequestService(db).submit(token)
-    except InvalidTokenError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link not found") from exc
-    except TokenExpiredError as exc:
-        raise HTTPException(status_code=status.HTTP_410_GONE, detail="This link has expired") from exc
-    except TokenRevokedError as exc:
+    except (InvalidTokenError, TokenExpiredError, TokenRevokedError) as exc:
+        raise _token_error_response(exc) from exc
+    return _to_public_read(db, request)
+
+
+@router.post("/{token}/documents", response_model=PublicComplianceRequestRead)
+async def upload_public_document(
+    token: str,
+    file: UploadFile,
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage_service),
+) -> PublicComplianceRequestRead:
+    try:
+        request = PublicRequestService(db).resolve_token(token)
+    except (InvalidTokenError, TokenExpiredError, TokenRevokedError) as exc:
+        raise _token_error_response(exc) from exc
+
+    content = await file.read()
+    upload = UploadedFilePayload(
+        filename=file.filename or "upload",
+        content_type=file.content_type or "",
+        content=content,
+    )
+    try:
+        DocumentService(db, storage).upload_for_request(request, upload)
+    except RequestNotEditableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except UnsupportedFileTypeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except FileTooLargeError as exc:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="This link has been revoked"
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
         ) from exc
+    return _to_public_read(db, request)
+
+
+@router.delete("/{token}/documents/{document_id}", response_model=PublicComplianceRequestRead)
+def delete_public_document(
+    token: str,
+    document_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    storage: StorageService = Depends(get_storage_service),
+) -> PublicComplianceRequestRead:
+    try:
+        request = PublicRequestService(db).resolve_token(token)
+    except (InvalidTokenError, TokenExpiredError, TokenRevokedError) as exc:
+        raise _token_error_response(exc) from exc
+
+    try:
+        DocumentService(db, storage).delete_for_request(request, document_id)
+    except RequestNotEditableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except DocumentNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return _to_public_read(db, request)

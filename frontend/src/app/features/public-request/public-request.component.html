@@ -95,6 +95,46 @@
       </div>
     }
 
+    <h2>{{ pt().documentsHeading }}</h2>
+    <div class="card">
+      @if (!isFinal()) {
+        <p class="muted">{{ pt().documentsHint }}</p>
+      }
+
+      @if (request()!.documents.length === 0) {
+        <p class="muted">{{ pt().noDocuments }}</p>
+      } @else {
+        <ul class="document-list">
+          @for (doc of request()!.documents; track doc.id) {
+            <li>
+              <span class="document-name">{{ doc.filename }}</span>
+              <span class="document-size muted">{{ formatFileSize(doc.size_bytes) }}</span>
+              @if (!isFinal()) {
+                <button
+                  type="button"
+                  class="secondary-button"
+                  [disabled]="deletingDocumentId() === doc.id"
+                  (click)="deleteDocument(doc.id)"
+                >
+                  {{ deletingDocumentId() === doc.id ? pt().deleting : pt().deleteButton }}
+                </button>
+              }
+            </li>
+          }
+        </ul>
+      }
+
+      @if (!isFinal()) {
+        @if (uploadError()) {
+          <p class="error">{{ uploadError() }}</p>
+        }
+        <label class="secondary-button upload-button">
+          {{ uploading() ? pt().uploading : pt().uploadButton }}
+          <input type="file" (change)="onFileSelected($event)" [disabled]="uploading()" hidden />
+        </label>
+      }
+    </div>
+
     @if (!isFinal()) {
       @if (saveMessage()) {
         <p class="success-text">{{ saveMessage() }}</p>

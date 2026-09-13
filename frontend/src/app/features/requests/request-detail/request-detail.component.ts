@@ -9,6 +9,8 @@ import {
   REQUEST_STATUS_BADGE_CLASSES,
   RequestStatus
 } from '../../../core/services/compliance-request.models';
+import { SupplierDocument } from '../../../core/services/supplier-document.models';
+import { formatFileSize } from '../../../core/util/format-file-size';
 import { TopNavComponent } from '../../../shared/top-nav/top-nav.component';
 
 @Component({
@@ -124,6 +126,24 @@ export class RequestDetailComponent implements OnInit {
     navigator.clipboard?.writeText(url).then(() => {
       this.copied.set(true);
       setTimeout(() => this.copied.set(false), 2000);
+    });
+  }
+
+  formatFileSize(bytes: number): string {
+    return formatFileSize(bytes);
+  }
+
+  downloadDocument(document: SupplierDocument): void {
+    this.api.downloadDocument(document.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = window.document.createElement('a');
+        link.href = url;
+        link.download = document.filename;
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.actionError.set(this.t().requests.detail.actionError)
     });
   }
 }

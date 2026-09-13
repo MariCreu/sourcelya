@@ -64,6 +64,13 @@ class PublicRequestService:
             for component in request_product.product.packaging_components
         }
 
+    def resolve_token(self, raw_token: str) -> ComplianceRequest:
+        """Public entry point for other token-scoped flows (document
+        upload/delete) that need the same invalid/expired/revoked checks
+        without going through `get_by_token`'s SENT->OPENED side effect.
+        """
+        return self._resolve(raw_token)
+
     def get_by_token(self, raw_token: str) -> ComplianceRequest:
         request = self._resolve(raw_token)
         if request.status == RequestStatus.SENT.value:

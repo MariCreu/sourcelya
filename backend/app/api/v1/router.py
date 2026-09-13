@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.v1 import (
     auth,
     companies,
+    documents,
     health,
     internal,
     products,
@@ -19,4 +20,5 @@ api_router.include_router(internal.router)
 api_router.include_router(suppliers.router)
 api_router.include_router(products.router)
 api_router.include_router(requests.router)
+api_router.include_router(documents.router)
 api_router.include_router(public_requests.router)

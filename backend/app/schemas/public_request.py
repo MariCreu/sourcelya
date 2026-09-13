@@ -4,6 +4,8 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.models.compliance_request import ComplianceRequest
+from app.models.supplier_document import SupplierDocument
+from app.schemas.supplier_document import PublicSupplierDocumentRead
 
 
 class PublicPackagingComponentRead(BaseModel):
@@ -37,10 +39,14 @@ class PublicComplianceRequestRead(BaseModel):
     supplier_name: str
     submitted_at: datetime | None
     products: list[PublicProductRead]
+    documents: list[PublicSupplierDocumentRead]
 
     @classmethod
     def from_model(
-        cls, request: ComplianceRequest, company_name: str
+        cls,
+        request: ComplianceRequest,
+        company_name: str,
+        documents: list[SupplierDocument] = (),
     ) -> "PublicComplianceRequestRead":
         return cls(
             status=request.status,
@@ -48,6 +54,7 @@ class PublicComplianceRequestRead(BaseModel):
             company_name=company_name,
             supplier_name=request.supplier.name,
             submitted_at=request.submitted_at,
+            documents=[PublicSupplierDocumentRead.from_model(document) for document in documents],
             products=[
                 PublicProductRead(
                     id=rp.product.id,

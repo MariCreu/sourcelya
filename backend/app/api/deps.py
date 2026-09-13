@@ -8,6 +8,7 @@ from app.core.database import SessionLocal
 from app.core.security import InvalidTokenError, SupabaseIdentity, decode_supabase_access_token
 from app.integrations.email.base import EmailSender
 from app.integrations.email.factory import get_email_sender
+from app.integrations.storage.factory import get_storage_service
 from app.models.company import Company
 from app.models.user import User
 from app.services.company_service import CompanyService

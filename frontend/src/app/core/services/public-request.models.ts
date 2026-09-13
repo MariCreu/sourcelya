@@ -1,4 +1,5 @@
 import { RequestLanguage, RequestStatus } from './compliance-request.models';
+import { PublicSupplierDocument } from './supplier-document.models';
 
 export interface PublicPackagingComponent {
   id: string;
@@ -28,6 +29,7 @@ export interface PublicComplianceRequest {
   supplier_name: string;
   submitted_at: string | null;
   products: PublicProduct[];
+  documents: PublicSupplierDocument[];
 }
 
 export interface PublicPackagingComponentUpdate {

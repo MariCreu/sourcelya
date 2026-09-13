@@ -195,6 +195,14 @@ export interface Dictionary {
       noActiveLink: string;
       notFoundError: string;
       actionError: string;
+      documentsHeading: string;
+      noDocuments: string;
+      downloadButton: string;
+      documentsTable: {
+        filename: string;
+        size: string;
+        uploadedAt: string;
+      };
     };
   };
 
@@ -223,5 +231,15 @@ export interface Dictionary {
     alreadySubmittedTitle: string;
     alreadySubmittedBody: string;
     poweredBy: string;
+    documentsHeading: string;
+    documentsHint: string;
+    noDocuments: string;
+    uploadButton: string;
+    uploading: string;
+    deleteButton: string;
+    deleting: string;
+    confirmDelete: string;
+    uploadErrorUnsupportedType: string;
+    uploadErrorTooLarge: string;
   };
 }

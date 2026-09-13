@@ -132,4 +132,31 @@ export class BackendApiService {
       {}
     );
   }
+
+  uploadPublicDocument(token: string, file: File): Observable<PublicComplianceRequest> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<PublicComplianceRequest>(
+      `${this.baseUrl}/public/requests/${token}/documents`,
+      formData
+    );
+  }
+
+  deletePublicDocument(token: string, documentId: string): Observable<PublicComplianceRequest> {
+    return this.http.delete<PublicComplianceRequest>(
+      `${this.baseUrl}/public/requests/${token}/documents/${documentId}`
+    );
+  }
+
+  // --- Company side: authenticated download of a supplier-uploaded file.
+  // `responseType: 'blob'` + a client-triggered download (see
+  // RequestDetailComponent.downloadDocument) rather than a plain <a href>,
+  // since the auth interceptor only attaches the bearer token to
+  // HttpClient requests, not to a browser's own navigation. ---
+
+  downloadDocument(documentId: string): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/documents/${documentId}/download`, {
+      responseType: 'blob'
+    });
+  }
 }
