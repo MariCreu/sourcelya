@@ -468,11 +468,139 @@ in the existing org instead of a new one — see B1's note above.)*
 
 ---
 
+## Decision: Option C, Pro plan
+
+**Confirmed** (correcting the earlier draft of Option C, which assumed a
+second Free project would be available): Supabase currently caps an
+account at **2 active Free projects total across every organization**
+where that account is Owner/Admin, not 2 per organization. Luna y Papel
+and InfanApp already occupy both. A new organization for Sourcelya
+therefore cannot also be Free — it goes straight to **Pro** (~$25/month
+fixed), specifically to avoid rewriting Auth/Storage (Option B2) and to
+avoid the Free tier's auto-pause behavior. Luna y Papel and InfanApp are
+untouched. Sourcelya's Supabase organization, billing, and (initially)
+lone project are fully separate from both.
+
+## Supabase setup — step by step (Block 2, in progress)
+
+Nothing here has been done yet. Steps 1–5 are manual actions in the
+Supabase dashboard — stop after each numbered step and wait for
+confirmation before doing the next one; nothing downstream (Render,
+Cloudflare, email, Anthropic, malware scanning) starts until this whole
+block is done and verified.
+
+### 1. Create the organization
+
+- Go to the Supabase dashboard's organization switcher (top-left) →
+  **New organization**.
+- Name it **Sourcelya** (or "Sourcelya SL" if that's the registered
+  legal entity — purely a label, no technical effect).
+- Type: Personal or Business, whichever matches how the Anthropic/
+  Resend/hosting accounts are also being registered — doesn't affect
+  billing mechanics.
+- This creates the org on the Free plan by default — that's fine, Pro
+  gets selected next, before creating the project.
+
+### 2. Upgrade the organization to Pro — before creating the project
+
+- Inside the new org: **Organization Settings → Billing** (sometimes
+  labeled "Subscription" or "Plans").
+- Select **Pro** ($25/month base).
+- Supabase will ask for a payment method at this point — that's between
+  you and Supabase's checkout page, not something to route through me.
+- Doing this **before** creating the project avoids any transitional
+  "project created on Free, needs upgrading" step.
+
+### 3. Create the Sourcelya project
+
+- Inside the now-Pro org: **New project**.
+- Project name: anything stable, e.g. `sourcelya` or
+  `sourcelya-production` — **this name has zero technical effect**: the
+  actual project URL uses an auto-generated random reference
+  (`https://<random-ref>.supabase.co`), never the name you type here.
+- Database password: use Supabase's **Generate a password** button
+  (don't type your own). Save it immediately in a password manager. It
+  never needs to be typed anywhere else by hand — the connection string
+  that embeds it gets copied once, later, straight into the hosting
+  provider's environment variables (a future block), never through this
+  chat.
+
+### 4. Region
+
+- Choose **Central EU (Frankfurt)** if it's offered — best fit for
+  Spain/EU customers on both latency and data-residency grounds, and a
+  common default for EU-based companies for exactly that reason.
+  **Ireland (West EU)** is a reasonable fallback if Frankfurt isn't
+  available or you prefer it — both are genuinely in the EU.
+- This choice is **permanent** — Supabase doesn't support migrating a
+  project to a different region later without recreating it — so pick
+  deliberately now rather than defaulting without looking.
+
+### 5. Database settings — what to leave alone
+
+- Nothing else needs configuring at creation time. Leave Postgres
+  version, extensions, and everything else at their defaults — the
+  schema itself is entirely handled by this repo's own Alembic
+  migrations (see [Migrations](../README.md#migrations)) once the
+  backend is wired up, not by anything set up manually in the dashboard.
+- Optional, not blocking: Supabase's connection string comes in two
+  forms — direct (port 5432) and pooled via PgBouncer (port 6543,
+  "Transaction" mode recommended by Supabase). At 2–5 pilots' worth of
+  concurrent connections either works fine; which one we use is a
+  one-line decision when `DATABASE_URL` actually gets set in a later
+  block, not something to decide now.
+
+### 6. Values we'll need later (don't send them yet — just note where they live)
+
+All under **Project Settings** once the project exists:
+
+| Value | Where to find it | Needed for |
+| --- | --- | --- |
+| Project URL (`https://<ref>.supabase.co`) | Settings → API | `SUPABASE_URL` |
+| `anon` public key | Settings → API | Frontend `supabaseAnonKey` |
+| `service_role` key | Settings → API | Backend `SUPABASE_SERVICE_ROLE_KEY` |
+| Database connection string | Settings → Database | `DATABASE_URL` |
+| Database password | Wherever you saved it in step 3 | Embedded in the connection string above |
+
+Nothing here gets created or configured in this block — this table is
+just so you know where to look when we actually wire up the backend
+hosting in a later block. The bucket for document storage doesn't exist
+yet either — that's a small, separate step once this block is confirmed
+done, still within "Supabase," not the next one.
+
+### 7. Secret vs. public
+
+| Value | Classification | Why |
+| --- | --- | --- |
+| Project URL | Public | Meant to be visible — it's just a hostname |
+| `anon` public key | Public by design | Supabase explicitly designs this key to be embedded in frontend code; it grants no more access than Supabase's access rules allow |
+| `service_role` key | **Secret, highest sensitivity** | Bypasses all access rules — full read/write to everything. Server-side only, in the backend's environment variables, never in frontend code, never in git |
+| Database password | **Secret** | Full database access if leaked |
+| Full database connection string | **Secret** | It's the password above, embedded in a URL |
+
+### 8. What never to paste into this chat
+
+To be explicit, since you asked: **nothing from step 7's "Secret" row,
+ever** — not the `service_role` key, not the database password, not the
+full connection string. When we reach the block where these actually get
+used, they go directly from the Supabase dashboard into the hosting
+provider's environment-variable UI (Render's dashboard, in the
+architecture already agreed) — never typed into this conversation. If I
+ever need to confirm something about a secret value, I'll ask you to
+confirm its *shape* (e.g., "does the connection string start with
+`postgresql://postgres.`") or confirm you've set it in the hosting
+provider, never to paste the value itself.
+
+The Project URL and the region chosen are the only two things from this
+block worth telling me directly, once done — both are public/non-
+sensitive and let me sanity-check we're aligned before moving on.
+
+---
+
 ## Next block
 
-Stopping here per your instruction — no Supabase or provider account has
-been touched. Once you confirm which of A/B/C to go with (and, if A,
-confirm whether that org is currently Free or Pro so I can pin the exact
-number), the next block is **Section 3 (Supabase)**: exact click-by-click
-instructions for what to create, which value to copy where, and never
-more secrets than the specific step needs.
+Stopping here — waiting for confirmation that steps 1–4 above are done
+(organization created, Pro selected, project created, region chosen)
+before continuing to the storage bucket and the rest of the Supabase
+block. Nothing beyond Supabase (Render, Cloudflare, email, Anthropic,
+malware scanning) starts until this whole block is verified working.
