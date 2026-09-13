@@ -1,14 +1,16 @@
 <div class="auth-card">
-  <h1>Log in</h1>
+  <div class="locale-row"><app-locale-switch /></div>
+
+  <h1>{{ t().auth.login.title }}</h1>
 
   <form (ngSubmit)="onSubmit()">
     <label>
-      Email
+      {{ t().auth.login.emailLabel }}
       <input type="email" name="email" [(ngModel)]="email" required autocomplete="email" />
     </label>
 
     <label>
-      Password
+      {{ t().auth.login.passwordLabel }}
       <input
         type="password"
         name="password"
@@ -23,9 +25,11 @@
     }
 
     <button type="submit" [disabled]="loading()">
-      {{ loading() ? 'Logging in…' : 'Log in' }}
+      {{ loading() ? t().auth.login.submitting : t().auth.login.submit }}
     </button>
   </form>
 
-  <p class="switch">Don't have an account? <a routerLink="/signup">Start free</a></p>
+  <p class="switch">
+    {{ t().auth.login.switchPrompt }} <a routerLink="/signup">{{ t().auth.login.switchLink }}</a>
+  </p>
 </div>

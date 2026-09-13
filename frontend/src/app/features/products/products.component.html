@@ -2,9 +2,9 @@
 
 <main>
   <div class="page-header">
-    <h1>Products</h1>
+    <h1>{{ t().products.pageTitle }}</h1>
     <button class="cta-primary" (click)="showForm.set(!showForm())">
-      {{ showForm() ? 'Cancel' : 'Add product' }}
+      {{ showForm() ? t().products.cancelButton : t().products.addButton }}
     </button>
   </div>
 
@@ -12,21 +12,21 @@
     <div class="card form-card">
       <form (ngSubmit)="createProduct()">
         <label>
-          Name
+          {{ t().products.form.nameLabel }}
           <input type="text" name="name" [(ngModel)]="name" required />
         </label>
         <label>
-          SKU
+          {{ t().products.form.skuLabel }}
           <input type="text" name="sku" [(ngModel)]="sku" />
         </label>
         <label>
-          Description
+          {{ t().products.form.descriptionLabel }}
           <textarea name="description" [(ngModel)]="description" rows="2"></textarea>
         </label>
         <label>
-          Supplier
+          {{ t().products.form.supplierLabel }}
           <select name="supplierId" [(ngModel)]="supplierId">
-            <option value="">No supplier yet</option>
+            <option value="">{{ t().products.form.noSupplierOption }}</option>
             @for (supplier of suppliers(); track supplier.id) {
               <option [value]="supplier.id">{{ supplier.name }}</option>
             }
@@ -38,38 +38,42 @@
         }
 
         <button type="submit" [disabled]="creating()">
-          {{ creating() ? 'Adding…' : 'Add product' }}
+          {{ creating() ? t().products.form.submitting : t().products.form.submit }}
         </button>
       </form>
     </div>
   }
 
   @if (loading()) {
-    <p class="muted">Loading…</p>
+    <p class="muted">{{ t().products.loading }}</p>
   } @else if (products().length === 0) {
     <div class="empty-state">
-      <p class="muted">No products yet. Add your first one to start tracking packaging data.</p>
+      <p class="muted">{{ t().products.empty }}</p>
     </div>
   } @else {
     <div class="card">
       <table>
         <thead>
           <tr>
-            <th>Name</th>
-            <th>SKU</th>
-            <th>Supplier</th>
-            <th>Packaging</th>
-            <th>Status</th>
+            <th>{{ t().products.table.name }}</th>
+            <th>{{ t().products.table.sku }}</th>
+            <th>{{ t().products.table.supplier }}</th>
+            <th>{{ t().products.table.packaging }}</th>
+            <th>{{ t().products.table.status }}</th>
           </tr>
         </thead>
         <tbody>
           @for (product of products(); track product.id) {
             <tr class="clickable" [routerLink]="['/products', product.id]">
               <td>{{ product.name }}</td>
-              <td>{{ product.sku || '—' }}</td>
+              <td>{{ product.sku || t().products.unknownValue }}</td>
               <td>{{ supplierName(product.supplier_id) }}</td>
               <td>{{ product.packaging_component_count }}</td>
-              <td><span class="status-badge status-{{ product.status }}">{{ product.status }}</span></td>
+              <td>
+                <span class="status-badge status-{{ product.status }}">{{
+                  t().statusLabels[product.status]
+                }}</span>
+              </td>
             </tr>
           }
         </tbody>

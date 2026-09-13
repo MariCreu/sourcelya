@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { BackendApiService } from '../../core/services/backend-api.service';
 import { Company } from '../../core/services/company.models';
+import { LocaleService } from '../../core/i18n/locale.service';
 import { Product } from '../../core/services/product.models';
 import { TopNavComponent } from '../../shared/top-nav/top-nav.component';
 
@@ -15,6 +16,9 @@ import { TopNavComponent } from '../../shared/top-nav/top-nav.component';
 })
 export class DashboardComponent implements OnInit {
   private readonly api = inject(BackendApiService);
+  private readonly localeService = inject(LocaleService);
+
+  readonly t = this.localeService.t;
 
   loading = signal(true);
   company = signal<Company | null>(null);
@@ -50,13 +54,16 @@ export class DashboardComponent implements OnInit {
         }
       },
       error: () => {
-        this.errorMessage.set('Could not load your account.');
+        this.errorMessage.set(this.t().onboarding.loadError);
         this.loading.set(false);
       }
     });
   }
 
   private loadProducts(): void {
+    // Post-onboarding dashboard content (product stats) is not part of the
+    // minimal signup/login/onboarding/nav journey being localized right
+    // now — left in English on purpose, see the root README's i18n section.
     this.api.listProducts().subscribe({
       next: (products) => this.products.set(products),
       error: () => this.errorMessage.set('Could not load products.')
@@ -74,7 +81,7 @@ export class DashboardComponent implements OnInit {
           this.onboarding.set(false);
         },
         error: () => {
-          this.errorMessage.set('Could not create the company. Check the fields and try again.');
+          this.errorMessage.set(this.t().onboarding.genericError);
           this.onboarding.set(false);
         }
       });

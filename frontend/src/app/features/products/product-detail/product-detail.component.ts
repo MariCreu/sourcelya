@@ -1,6 +1,7 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { LocaleService } from '../../../core/i18n/locale.service';
 import { BackendApiService } from '../../../core/services/backend-api.service';
 import { PACKAGING_TYPES, PackagingType } from '../../../core/services/packaging-component.models';
 import { ProductDetail } from '../../../core/services/product.models';
@@ -16,7 +17,9 @@ import { TopNavComponent } from '../../../shared/top-nav/top-nav.component';
 export class ProductDetailComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly api = inject(BackendApiService);
+  private readonly localeService = inject(LocaleService);
 
+  readonly t = this.localeService.t;
   readonly packagingTypes = PACKAGING_TYPES;
 
   loading = signal(true);
@@ -35,6 +38,21 @@ export class ProductDetailComponent implements OnInit {
     return this.route.snapshot.paramMap.get('productId')!;
   }
 
+  packagingTypeLabel(value: string): string {
+    const labels = this.t().packagingTypes as Record<string, string>;
+    return labels[value] ?? value;
+  }
+
+  formatMissingFields(fields: string[]): string {
+    const labels: Record<string, string> = {
+      packaging_type: this.t().productDetail.form.packagingTypeLabel,
+      material: this.t().productDetail.form.materialLabel,
+      weight_grams: this.t().productDetail.form.weightLabel,
+      recycled_content_percentage: this.t().productDetail.form.recycledLabel
+    };
+    return fields.map((field) => labels[field] ?? field).join(', ');
+  }
+
   ngOnInit(): void {
     this.load();
   }
@@ -47,7 +65,7 @@ export class ProductDetailComponent implements OnInit {
         this.loading.set(false);
       },
       error: () => {
-        this.errorMessage.set('Could not load this product.');
+        this.errorMessage.set(this.t().productDetail.notFoundError);
         this.loading.set(false);
       }
     });
@@ -75,9 +93,7 @@ export class ProductDetailComponent implements OnInit {
           this.load(); // refresh so the product's overall status recomputes
         },
         error: () => {
-          this.errorMessage.set(
-            'Could not add the packaging component. Check the fields and try again.'
-          );
+          this.errorMessage.set(this.t().productDetail.form.genericError);
           this.creating.set(false);
         }
       });

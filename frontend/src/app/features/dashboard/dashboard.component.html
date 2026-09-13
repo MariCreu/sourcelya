@@ -5,24 +5,24 @@
     <p class="muted">Loading…</p>
   } @else if (!company()) {
     <div class="onboarding-card">
-      <h1>Set up your company</h1>
-      <p class="muted">One last step before you can invite suppliers.</p>
+      <h1>{{ t().onboarding.title }}</h1>
+      <p class="muted">{{ t().onboarding.subtitle }}</p>
 
       <form (ngSubmit)="createCompany()">
         <label>
-          Company name
+          {{ t().onboarding.companyNameLabel }}
           <input type="text" name="companyName" [(ngModel)]="companyName" required />
         </label>
 
         <label>
-          Country
+          {{ t().onboarding.countryLabel }}
           <input
             type="text"
             name="companyCountry"
             [(ngModel)]="companyCountry"
             required
             maxlength="2"
-            placeholder="e.g. NL"
+            [placeholder]="t().onboarding.countryPlaceholder"
           />
         </label>
 
@@ -31,7 +31,7 @@
         }
 
         <button type="submit" [disabled]="onboarding()">
-          {{ onboarding() ? 'Creating…' : 'Create company' }}
+          {{ onboarding() ? t().onboarding.submitting : t().onboarding.submit }}
         </button>
       </form>
     </div>

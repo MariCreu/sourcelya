@@ -2,21 +2,23 @@
 
 <main>
   @if (loading()) {
-    <p class="muted">Loading…</p>
+    <p class="muted">{{ t().productDetail.loading }}</p>
   } @else if (!product()) {
     <p class="error">{{ errorMessage() }}</p>
   } @else {
-    <p><a routerLink="/products">&larr; Back to products</a></p>
+    <p><a routerLink="/products">{{ t().productDetail.backLink }}</a></p>
 
     <div class="page-header">
       <h1>{{ product()!.name }}</h1>
-      <span class="status-badge status-{{ product()!.status }}">{{ product()!.status }}</span>
+      <span class="status-badge status-{{ product()!.status }}">{{
+        t().statusLabels[product()!.status]
+      }}</span>
     </div>
 
     @if (product()!.sku || product()!.description) {
       <p class="muted">
         @if (product()!.sku) {
-          SKU: {{ product()!.sku }}
+          {{ t().productDetail.skuPrefix }} {{ product()!.sku }}
         }
         @if (product()!.description) {
           — {{ product()!.description }}
@@ -25,9 +27,9 @@
     }
 
     <div class="page-header">
-      <h2>Packaging components</h2>
+      <h2>{{ t().productDetail.packagingHeading }}</h2>
       <button class="cta-primary" (click)="showForm.set(!showForm())">
-        {{ showForm() ? 'Cancel' : 'Add component' }}
+        {{ showForm() ? t().productDetail.cancelButton : t().productDetail.addComponentButton }}
       </button>
     </div>
 
@@ -35,27 +37,38 @@
       <div class="card form-card">
         <form (ngSubmit)="addComponent()">
           <label>
-            Name
-            <input type="text" name="name" [(ngModel)]="name" required placeholder="e.g. Outer box" />
+            {{ t().productDetail.form.nameLabel }}
+            <input
+              type="text"
+              name="name"
+              [(ngModel)]="name"
+              required
+              [placeholder]="t().productDetail.form.namePlaceholder"
+            />
           </label>
           <label>
-            Packaging type
+            {{ t().productDetail.form.packagingTypeLabel }}
             <select name="packagingType" [(ngModel)]="packagingType" required>
               @for (type of packagingTypes; track type) {
-                <option [value]="type">{{ type }}</option>
+                <option [value]="type">{{ packagingTypeLabel(type) }}</option>
               }
             </select>
           </label>
           <label>
-            Material
-            <input type="text" name="material" [(ngModel)]="material" placeholder="e.g. cardboard" />
+            {{ t().productDetail.form.materialLabel }}
+            <input
+              type="text"
+              name="material"
+              [(ngModel)]="material"
+              [placeholder]="t().productDetail.form.materialPlaceholder"
+            />
           </label>
           <label>
-            Weight (grams)
+            {{ t().productDetail.form.weightLabel }}
             <input type="number" name="weightGrams" [(ngModel)]="weightGrams" min="0" />
           </label>
           <label>
-            Recycled content (%)
+            {{ t().productDetail.form.recycledLabel }}
             <input
               type="number"
               name="recycledContentPercentage"
@@ -70,7 +83,7 @@
           }
 
           <button type="submit" [disabled]="creating()">
-            {{ creating() ? 'Adding…' : 'Add component' }}
+            {{ creating() ? t().productDetail.form.submitting : t().productDetail.form.submit }}
           </button>
         </form>
       </div>
@@ -78,40 +91,40 @@
 
     @if (product()!.packaging_components.length === 0) {
       <div class="empty-state">
-        <p class="muted">
-          No packaging components yet. Add one (box, bag, label, ...) to start tracking this
-          product's packaging data.
-        </p>
+        <p class="muted">{{ t().productDetail.empty }}</p>
       </div>
     } @else {
       <div class="card">
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Material</th>
-              <th>Weight (g)</th>
-              <th>Recycled %</th>
-              <th>Status</th>
+              <th>{{ t().productDetail.table.name }}</th>
+              <th>{{ t().productDetail.table.type }}</th>
+              <th>{{ t().productDetail.table.material }}</th>
+              <th>{{ t().productDetail.table.weight }}</th>
+              <th>{{ t().productDetail.table.recycled }}</th>
+              <th>{{ t().productDetail.table.status }}</th>
             </tr>
           </thead>
           <tbody>
             @for (component of product()!.packaging_components; track component.id) {
               <tr>
                 <td>{{ component.name }}</td>
-                <td>{{ component.packaging_type }}</td>
-                <td>{{ component.material || '—' }}</td>
-                <td>{{ component.weight_grams ?? '—' }}</td>
-                <td>{{ component.recycled_content_percentage ?? '—' }}</td>
+                <td>{{ packagingTypeLabel(component.packaging_type) }}</td>
+                <td>{{ component.material || t().productDetail.unknownValue }}</td>
+                <td>{{ component.weight_grams ?? t().productDetail.unknownValue }}</td>
+                <td>{{ component.recycled_content_percentage ?? t().productDetail.unknownValue }}</td>
                 <td>
-                  <span class="status-badge status-{{ component.status }}">{{ component.status }}</span>
+                  <span class="status-badge status-{{ component.status }}">{{
+                    t().statusLabels[component.status]
+                  }}</span>
                 </td>
               </tr>
               @if (component.missing_fields.length > 0) {
                 <tr>
                   <td colspan="6" class="missing-fields">
-                    Missing: {{ component.missing_fields.join(', ') }}
+                    {{ t().productDetail.missingFieldsPrefix }}
+                    {{ formatMissingFields(component.missing_fields) }}
                   </td>
                 </tr>
               }

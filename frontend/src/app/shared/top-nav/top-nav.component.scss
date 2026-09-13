@@ -34,6 +34,12 @@
   }
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .link-button {
   background: none;
   border: none;

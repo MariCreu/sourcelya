@@ -2,9 +2,9 @@
 
 <main>
   <div class="page-header">
-    <h1>Suppliers</h1>
+    <h1>{{ t().suppliers.pageTitle }}</h1>
     <button class="cta-primary" (click)="showForm.set(!showForm())">
-      {{ showForm() ? 'Cancel' : 'Add supplier' }}
+      {{ showForm() ? t().suppliers.cancelButton : t().suppliers.addButton }}
     </button>
   </div>
 
@@ -12,16 +12,22 @@
     <div class="card form-card">
       <form (ngSubmit)="createSupplier()">
         <label>
-          Name
+          {{ t().suppliers.form.nameLabel }}
           <input type="text" name="name" [(ngModel)]="name" required />
         </label>
         <label>
-          Email
+          {{ t().suppliers.form.emailLabel }}
           <input type="email" name="email" [(ngModel)]="email" required />
         </label>
         <label>
-          Country
-          <input type="text" name="country" [(ngModel)]="country" maxlength="2" placeholder="e.g. CN" />
+          {{ t().suppliers.form.countryLabel }}
+          <input
+            type="text"
+            name="country"
+            [(ngModel)]="country"
+            maxlength="2"
+            [placeholder]="t().suppliers.form.countryPlaceholder"
+          />
         </label>
 
         @if (errorMessage()) {
@@ -29,26 +35,26 @@
         }
 
         <button type="submit" [disabled]="creating()">
-          {{ creating() ? 'Adding…' : 'Add supplier' }}
+          {{ creating() ? t().suppliers.form.submitting : t().suppliers.form.submit }}
         </button>
       </form>
     </div>
   }
 
   @if (loading()) {
-    <p class="muted">Loading…</p>
+    <p class="muted">{{ t().suppliers.loading }}</p>
   } @else if (suppliers().length === 0) {
     <div class="empty-state">
-      <p class="muted">No suppliers yet. Add your first one to start requesting information.</p>
+      <p class="muted">{{ t().suppliers.empty }}</p>
     </div>
   } @else {
     <div class="card">
       <table>
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Country</th>
+            <th>{{ t().suppliers.table.name }}</th>
+            <th>{{ t().suppliers.table.email }}</th>
+            <th>{{ t().suppliers.table.country }}</th>
           </tr>
         </thead>
         <tbody>
@@ -56,7 +62,7 @@
             <tr>
               <td>{{ supplier.name }}</td>
               <td>{{ supplier.email }}</td>
-              <td>{{ supplier.country || '—' }}</td>
+              <td>{{ supplier.country || t().suppliers.unknownValue }}</td>
             </tr>
           }
         </tbody>

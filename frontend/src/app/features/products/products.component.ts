@@ -1,6 +1,7 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { LocaleService } from '../../core/i18n/locale.service';
 import { BackendApiService } from '../../core/services/backend-api.service';
 import { Product } from '../../core/services/product.models';
 import { Supplier } from '../../core/services/supplier.models';
@@ -15,6 +16,9 @@ import { TopNavComponent } from '../../shared/top-nav/top-nav.component';
 })
 export class ProductsComponent implements OnInit {
   private readonly api = inject(BackendApiService);
+  private readonly localeService = inject(LocaleService);
+
+  readonly t = this.localeService.t;
 
   loading = signal(true);
   products = signal<Product[]>([]);
@@ -40,7 +44,7 @@ export class ProductsComponent implements OnInit {
         this.loading.set(false);
       },
       error: () => {
-        this.errorMessage.set('Could not load products.');
+        this.errorMessage.set(this.t().products.loadError);
         this.loading.set(false);
       }
     });
@@ -48,8 +52,9 @@ export class ProductsComponent implements OnInit {
   }
 
   supplierName(supplierId: string | null): string {
-    if (!supplierId) return '—';
-    return this.suppliers().find((supplier) => supplier.id === supplierId)?.name ?? '—';
+    const unknown = this.t().products.unknownValue;
+    if (!supplierId) return unknown;
+    return this.suppliers().find((supplier) => supplier.id === supplierId)?.name ?? unknown;
   }
 
   createProduct(): void {
@@ -73,7 +78,7 @@ export class ProductsComponent implements OnInit {
           this.creating.set(false);
         },
         error: () => {
-          this.errorMessage.set('Could not create the product. Check the fields and try again.');
+          this.errorMessage.set(this.t().products.form.genericError);
           this.creating.set(false);
         }
       });

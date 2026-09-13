@@ -1,0 +1,19 @@
+<div class="locale-switch" role="group" aria-label="Language / Idioma">
+  <button
+    type="button"
+    [class.active]="locale() === 'es'"
+    (click)="select('es')"
+    aria-label="Español"
+  >
+    ES
+  </button>
+  <span class="divider">|</span>
+  <button
+    type="button"
+    [class.active]="locale() === 'en'"
+    (click)="select('en')"
+    aria-label="English"
+  >
+    EN
+  </button>
+</div>

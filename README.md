@@ -230,34 +230,41 @@ Future regulation-specific pages (`/es/ppwr`, `/en/ppwr/importers`,
 `/es/guias/...`, `/en/dpp/...`) are deliberately not built yet — see
 `web/README.md` for the directory convention they'd follow when they are.
 
-### App i18n: what's built vs. deliberately deferred
+### App i18n: what's translated vs. deliberately deferred
 
-The brief also asks for `app.sourcelya.com` (the Angular app) to be
-"prepared" for ES/EN, plus a `requestLanguage`-type concept on
-`ComplianceRequest`. Two different calls were made here, and it's worth
-being explicit about why:
+`app.sourcelya.com` has its own runtime i18n now — `frontend/src/app/core/i18n/`:
+`LocaleService` (a signal holding the active locale, default `es` — Spain is
+the first go-to-market market — persisted to `localStorage`, no cookies),
+`dictionaries/{es,en}.ts` (flat objects implementing one `Dictionary`
+interface, so a missing translation key is a compile error, not a silent
+blank), and a small `LocaleSwitchComponent` (the same discreet `ES | EN`
+pattern as the landing site). Not `@angular/localize`: that needs a build
+per locale, which doesn't fit a runtime switcher and is real build
+complexity this app doesn't need yet — a signal-driven dictionary is the
+same centralization pattern already proven by `BRAND` and the landing
+site's `content/*.json`, just applied at runtime instead of build time.
 
-- **Built**: `Locale` (`app/domain/enums.py`, backend) — an `es`/`en` enum
-  reserved for `ComplianceRequest.language` once that table exists (FASE 3)
-  and for the app's own future locale switching. One shared type for both,
-  since they're the same concept. Costs nothing to have now (no table, no
-  migration) and saves inventing one later under time pressure.
-- **Deliberately not built**: an actual i18n library/service wired into the
-  existing Angular screens (login, signup, dashboard, suppliers, products).
-  Retrofitting `@angular/localize` or similar — extracting every hardcoded
-  string across five components, deciding a per-locale build strategy —
-  is real work for close to zero validation value right now: those screens
-  aren't what a first Spanish customer sees (the landing site is, and it's
-  already bilingual), and they're still changing shape fast enough that
-  translating them today means re-translating them again soon. The brief
-  itself only requires that **new** screens avoid hardcoded strings, not
-  that existing ones get retrofitted — there is no new screen in this task
-  to apply that to (the CTA already points straight at the existing
-  `/signup`, deliberately — see the next section). When the app's first
-  genuinely customer-facing screen is built, it should follow the same
-  centralization pattern already proven twice (`BRAND`, the landing site's
-  `content/*.json`) — a small dictionary + a service — rather than a
-  library pulled in for its own sake.
+**Translated**: the nav (`TopNavComponent`), login, signup, and the
+onboarding step (dashboard's company-creation form) — the exact minimal
+journey a first Spanish customer walks through — plus, since they're new
+this phase, the FASE 2 screens: Suppliers, Products, and the product
+detail/packaging-components screen, including the status badges
+(`green`/`orange`/`red` → "Completo"/"Falta información"/"Requiere
+revisión") and packaging-type labels.
+
+**Deliberately left in English**: the post-onboarding dashboard body
+(product-count stats, the empty-state message) — it existed before this
+phase, isn't part of the "minimal existing journey" the brief named, and
+FASE 5 rebuilds it into the real dashboard anyway, so translating it now
+means translating it twice. Third-party error text (Supabase's own login/
+signup error messages) is shown as-is rather than guessing a translation
+for copy we don't control.
+
+Verified against the real backend end to end (not just visual): see
+[Manual flow](#manual-flow-verified-end-to-end) below — every screenshot
+there is the actual running app in Spanish, switched to English live via
+the same `LocaleSwitchComponent` at the end to confirm both directions
+work.
 
 ### The CTA and the PPWR checker
 
@@ -485,6 +492,36 @@ Frontend: `cd frontend && npm test` runs the Angular/Karma unit tests
 (requires a Chromium binary; see `frontend/README.md` if you need to point
 Karma at a specific browser).
 
+## Manual flow (verified end to end)
+
+No Supabase project is available in every environment this runs in, so the
+full flow below was verified against the **real backend and a real
+Postgres**, bypassing only Supabase's own login UI: a Supabase-shaped
+session (an HS256 access token accepted because `SUPABASE_JWT_STRATEGY=hs256`
+locally, plus a session object matching `@supabase/supabase-js`'s own
+`localStorage` schema) is written directly to `localStorage` under its
+`sb-<host>-auth-token` key, exactly what the real Supabase Auth client
+would have written after a real login. Everything downstream — the
+`/api/auth/me` call, company onboarding, suppliers, products, packaging
+components, status computation — hit the real FastAPI app and a real
+PostgreSQL database, not a mock.
+
+1. Load `/dashboard` with no company yet → onboarding form (Spanish, the
+   default locale).
+2. Create the company ("Importadora Ejemplo SL") → real dashboard.
+3. Suppliers → add "Shenzhen Wonderful Packaging" (CN) → appears in the list.
+4. Products → add "Cepillo de bambú" (SKU `CB-001`), assign the supplier
+   above → status `Falta información` (orange — no packaging components yet).
+5. Open the product → add packaging component "Caja exterior" (box,
+   material only) → stays orange, missing fields shown in Spanish
+   ("Falta: Peso (gramos), Contenido reciclado (%)").
+6. Add a second component "Bolsa interior" (bag, material + weight +
+   recycled %, all required fields filled) → that component turns green.
+7. Switch to English with the header's `EN` toggle, live, no reload → every
+   label (nav, status badges, packaging type, missing-fields list) updates
+   instantly; the data entered (product/supplier/component names) is
+   unaffected, as it should be — it's data, not UI copy.
+
 ## Migrations
 
 [Alembic](https://alembic.sqlalchemy.org/), driven from `backend/alembic/`.
@@ -530,7 +567,8 @@ backend/            # api.sourcelya.com
 frontend/           # app.sourcelya.com — the authenticated app, no landing content
   src/app/
     core/           # auth service, HTTP interceptor, route guard, API client,
-                     # brand.ts (naming/copy), analytics.service.ts
+                     # brand.ts (naming/copy), analytics.service.ts,
+                     # i18n/ (LocaleService, es/en dictionaries, locale switch)
     features/       # auth (login/signup), dashboard, suppliers,
                      # products (+ product-detail)
     shared/         # cross-feature UI: top-nav, shared list-page styles
@@ -553,7 +591,11 @@ suite](#integration-suite-real-postgresql) and the `Locale` enum.
   alongside the fast SQLite one.
 - **FASE 2 — done**: Suppliers and Products CRUD (with nested packaging
   components), company-scoped and cross-tenant-tested end to end; dashboard
-  now shows real product counts/status instead of placeholders.
+  now shows real product counts/status instead of placeholders; all of it
+  bilingual (ES/EN) via the new app-level i18n — see [App
+  i18n](#app-i18n-whats-translated-vs-deliberately-deferred) — and verified
+  against the real backend, not just visually (see [Manual
+  flow](#manual-flow-verified-end-to-end)).
 - **FASE 3**: `ComplianceRequest` / `ComplianceRequestProduct` + secure
   supplier link (`/request/{token}`).
 - **FASE 4**: `SupplierDocument` + document uploads (Supabase Storage,

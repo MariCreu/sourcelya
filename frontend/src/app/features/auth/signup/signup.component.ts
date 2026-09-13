@@ -3,20 +3,22 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { AnalyticsService } from '../../../core/analytics.service';
 import { AuthService } from '../../../core/auth/auth.service';
-import { BRAND } from '../../../core/brand';
+import { LocaleSwitchComponent } from '../../../core/i18n/locale-switch/locale-switch.component';
+import { LocaleService } from '../../../core/i18n/locale.service';
 
 @Component({
   selector: 'app-signup',
   standalone: true,
-  imports: [FormsModule, RouterLink],
+  imports: [FormsModule, RouterLink, LocaleSwitchComponent],
   templateUrl: './signup.component.html',
   styleUrl: '../auth-form.scss'
 })
 export class SignupComponent {
   private readonly authService = inject(AuthService);
   private readonly analytics = inject(AnalyticsService);
+  private readonly localeService = inject(LocaleService);
 
-  readonly brand = BRAND;
+  readonly t = this.localeService.t;
 
   email = '';
   password = '';
@@ -33,7 +35,11 @@ export class SignupComponent {
       this.submitted.set(true);
       this.analytics.track('signup_completed');
     } catch (error) {
-      this.errorMessage.set(error instanceof Error ? error.message : 'Could not sign up.');
+      // Supabase's own error message is shown as-is when present — see the
+      // same note in login.component.ts.
+      this.errorMessage.set(
+        error instanceof Error ? error.message : this.t().auth.signup.genericError
+      );
     } finally {
       this.loading.set(false);
     }
