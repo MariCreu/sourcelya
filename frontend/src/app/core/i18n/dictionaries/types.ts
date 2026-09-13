@@ -5,6 +5,7 @@ export interface Dictionary {
     dashboard: string;
     suppliers: string;
     products: string;
+    requests: string;
     logout: string;
   };
 
@@ -137,4 +138,90 @@ export interface Dictionary {
   };
 
   packagingTypes: Record<PackagingType, string>;
+
+  requestStatusLabels: Record<string, string>;
+
+  requests: {
+    pageTitle: string;
+    newButton: string;
+    loading: string;
+    loadError: string;
+    empty: string;
+    table: {
+      supplier: string;
+      products: string;
+      language: string;
+      status: string;
+      sentAt: string;
+      lastActivity: string;
+    };
+    unknownValue: string;
+    languageLabels: { es: string; en: string };
+    new: {
+      backLink: string;
+      title: string;
+      supplierLabel: string;
+      chooseSupplierOption: string;
+      productsLabel: string;
+      noProductsForSupplier: string;
+      languageLabel: string;
+      submit: string;
+      submitting: string;
+      genericError: string;
+      needsAtLeastOneProduct: string;
+    };
+    detail: {
+      backLink: string;
+      statusLabel: string;
+      timelineHeading: string;
+      timeline: {
+        created: string;
+        sent: string;
+        opened: string;
+        submitted: string;
+      };
+      productsHeading: string;
+      sendButton: string;
+      sending: string;
+      revokeButton: string;
+      revoking: string;
+      resendButton: string;
+      resending: string;
+      confirmRevoke: string;
+      linkRevealedTitle: string;
+      linkRevealedBody: string;
+      copyLinkButton: string;
+      copiedLabel: string;
+      noActiveLink: string;
+      notFoundError: string;
+      actionError: string;
+    };
+  };
+
+  publicRequest: {
+    invalidToken: string;
+    expiredToken: string;
+    revokedToken: string;
+    genericError: string;
+    loading: string;
+    heading: (companyName: string) => string;
+    subheading: string;
+    productsHeading: string;
+    fields: {
+      material: string;
+      weightGrams: string;
+      recycledContentPercentage: string;
+      packagingReference: string;
+      notes: string;
+    };
+    saveButton: string;
+    saving: string;
+    saveSuccess: string;
+    submitButton: string;
+    submitting: string;
+    submitConfirm: string;
+    alreadySubmittedTitle: string;
+    alreadySubmittedBody: string;
+    poweredBy: string;
+  };
 }

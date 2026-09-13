@@ -5,6 +5,7 @@ export const es: Dictionary = {
     dashboard: 'Panel',
     suppliers: 'Proveedores',
     products: 'Productos',
+    requests: 'Solicitudes',
     logout: 'Cerrar sesión'
   },
 
@@ -145,5 +146,102 @@ export const es: Dictionary = {
     filler: 'Relleno',
     outer_envelope: 'Sobre exterior',
     other: 'Otro'
+  },
+
+  requestStatusLabels: {
+    draft: 'Borrador',
+    sent: 'Enviada',
+    opened: 'Abierta por el proveedor',
+    in_progress: 'En progreso',
+    submitted: 'Completada',
+    review_required: 'Requiere revisión',
+    completed: 'Cerrada'
+  },
+
+  requests: {
+    pageTitle: 'Solicitudes',
+    newButton: 'Nueva solicitud',
+    loading: 'Cargando…',
+    loadError: 'No se han podido cargar las solicitudes.',
+    empty:
+      'Todavía no has enviado ninguna solicitud. Crea la primera para pedir información a un proveedor.',
+    table: {
+      supplier: 'Proveedor',
+      products: 'Productos',
+      language: 'Idioma',
+      status: 'Estado',
+      sentAt: 'Enviada',
+      lastActivity: 'Última actividad'
+    },
+    unknownValue: '—',
+    languageLabels: { es: 'Español', en: 'Inglés' },
+    new: {
+      backLink: '← Volver a solicitudes',
+      title: 'Nueva solicitud',
+      supplierLabel: 'Proveedor',
+      chooseSupplierOption: 'Elige un proveedor',
+      productsLabel: 'Productos a solicitar',
+      noProductsForSupplier: 'Este proveedor todavía no tiene productos.',
+      languageLabel: 'Idioma de la solicitud',
+      submit: 'Crear solicitud',
+      submitting: 'Creando…',
+      genericError: 'No se ha podido crear la solicitud. Revisa los campos e inténtalo de nuevo.',
+      needsAtLeastOneProduct: 'Selecciona al menos un producto.'
+    },
+    detail: {
+      backLink: '← Volver a solicitudes',
+      statusLabel: 'Estado',
+      timelineHeading: 'Actividad',
+      timeline: {
+        created: 'Creada',
+        sent: 'Enviada',
+        opened: 'Abierta por el proveedor',
+        submitted: 'Completada por el proveedor'
+      },
+      productsHeading: 'Productos incluidos',
+      sendButton: 'Enviar solicitud',
+      sending: 'Enviando…',
+      revokeButton: 'Revocar enlace',
+      revoking: 'Revocando…',
+      resendButton: 'Reenviar email',
+      resending: 'Reenviando…',
+      confirmRevoke: '¿Seguro que quieres revocar el enlace? El proveedor ya no podrá usarlo.',
+      linkRevealedTitle: 'Enlace seguro generado',
+      linkRevealedBody:
+        'Se ha enviado por email al proveedor. Por seguridad, este enlace solo se muestra una vez:',
+      copyLinkButton: 'Copiar enlace',
+      copiedLabel: '¡Copiado!',
+      noActiveLink: 'Todavía no se ha enviado ningún enlace a este proveedor.',
+      notFoundError: 'No se ha podido cargar esta solicitud.',
+      actionError: 'No se ha podido completar la acción. Inténtalo de nuevo.'
+    }
+  },
+
+  publicRequest: {
+    invalidToken: 'Este enlace no es válido.',
+    expiredToken: 'Este enlace ha caducado. Pide a la empresa que te reenvíe la solicitud.',
+    revokedToken: 'Este enlace ya no está disponible.',
+    genericError: 'No se ha podido cargar la solicitud.',
+    loading: 'Cargando…',
+    heading: (companyName: string) => `Solicitud de información de ${companyName}`,
+    subheading:
+      'No necesitas crear una cuenta. Completa los datos de packaging que puedas y guarda tu progreso; puedes volver más tarde con el mismo enlace.',
+    productsHeading: 'Productos',
+    fields: {
+      material: 'Material',
+      weightGrams: 'Peso (gramos)',
+      recycledContentPercentage: 'Contenido reciclado (%)',
+      packagingReference: 'Referencia de packaging',
+      notes: 'Notas'
+    },
+    saveButton: 'Guardar',
+    saving: 'Guardando…',
+    saveSuccess: 'Progreso guardado.',
+    submitButton: 'Enviar solicitud',
+    submitting: 'Enviando…',
+    submitConfirm: '¿Enviar la solicitud? Podrás seguir viéndola, pero no editarla después.',
+    alreadySubmittedTitle: 'Solicitud enviada',
+    alreadySubmittedBody: 'Gracias. Esta solicitud ya ha sido enviada a la empresa.',
+    poweredBy: 'Gestionado con Sourcelya'
   }
 };

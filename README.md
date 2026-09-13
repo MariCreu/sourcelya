@@ -11,9 +11,11 @@ marketing copy (tagline, one-line explanation) lives in one place —
 > Sourcelya helps you collect and organise supplier documentation. It does
 > not constitute legal advice and does not guarantee regulatory compliance.
 
-This repository currently implements **FASE 1** of the roadmap: architecture,
-database schema and authentication. See [Roadmap](#roadmap) below for what's
-next.
+This repository currently implements **FASE 1–3** of the roadmap:
+architecture, database schema, authentication, the Suppliers/Products
+catalog, and now the first genuinely critical flow — a company sending a
+supplier a secure, no-login-required link to fill in packaging data. See
+[Roadmap](#roadmap) below for what's next.
 
 ## Product positioning
 
@@ -110,13 +112,17 @@ RS256/ES256 token with `alg: HS256`, using the public key as an HMAC secret).
 `tests/test_auth_jwks.py` proves this against a real local JWKS HTTP endpoint
 and a real EC keypair, not a mocked signature check.
 
-**Supplier tokens** (design decision, applies from FASE 3 onward when
-`ComplianceRequest` is introduced): a supplier never has an account. Their
-request link uses a cryptographically random token; only its SHA-256 hash
-would ever be stored, alongside an expiry and a revoked-at timestamp, so
-links can expire or be revoked without ever persisting a usable token in the
-database. `generate_secure_token` / `hash_token` in `app/core/security.py`
-already implement and test this.
+**Supplier tokens** (implemented in FASE 3): a supplier never has an
+account. Their request link (`/request/{token}`) uses a cryptographically
+random token (`generate_secure_token`); only its SHA-256 hash
+(`hash_token`) is ever stored on `ComplianceRequest.secure_token_hash`,
+alongside `token_expires_at` and `token_revoked_at`, so links can expire or
+be revoked without a usable token ever existing in the database. Every
+public-portal request re-derives the `ComplianceRequest` from the token's
+hash (`PublicRequestService._resolve`) — there is no code path that lets a
+request or company id be passed in directly instead. See [Public supplier
+portal](#public-supplier-portal) below for the full request lifecycle and
+the specific attacks this is tested against.
 
 ### Why not an in-process scheduler for jobs
 
@@ -246,11 +252,20 @@ site's `content/*.json`, just applied at runtime instead of build time.
 
 **Translated**: the nav (`TopNavComponent`), login, signup, and the
 onboarding step (dashboard's company-creation form) — the exact minimal
-journey a first Spanish customer walks through — plus, since they're new
-this phase, the FASE 2 screens: Suppliers, Products, and the product
-detail/packaging-components screen, including the status badges
-(`green`/`orange`/`red` → "Completo"/"Falta información"/"Requiere
-revisión") and packaging-type labels.
+journey a first Spanish customer walks through — plus the FASE 2 screens
+(Suppliers, Products, product detail/packaging-components, including the
+status badges and packaging-type labels) and, new this phase, the FASE 3
+Requests screens (list/new/detail) through the same `LocaleService`.
+
+The **public supplier portal is a special case**: it must speak
+`ComplianceRequest.language` (chosen once by the company, e.g. a Spanish
+company inviting an English-speaking supplier), never the visiting
+browser's own preference or `LocaleService`'s state — a supplier who never
+logs in has no relationship to the authenticated app's locale switcher at
+all. `PublicRequestComponent` reads straight from `DICTIONARIES[language]`
+by that field, bypassing `LocaleService` entirely, and has its own small
+`publicRequest` dictionary section (heading, field labels, save/submit
+copy, error states) rather than reusing the authenticated app's strings.
 
 **Deliberately left in English**: the post-onboarding dashboard body
 (product-count stats, the empty-state message) — it existed before this
@@ -289,15 +304,30 @@ immediately redo the model. See `backend/app/models/`:
 - **`Supplier`**, **`Product`**, **`PackagingComponent`** — the FASE 2 catalog
   entities: full CRUD now exists on top of these (see
   [API endpoints](#api-endpoints) and [Roadmap](#roadmap)).
+- **`ComplianceRequest`**, **`ComplianceRequestProduct`** (FASE 3) — a
+  company's request to one supplier covering one or more of that supplier's
+  products. `status` is a linear `VARCHAR` state machine (`draft -> sent ->
+  opened -> in_progress -> submitted`; `review_required`/`completed` exist
+  as future states nothing transitions into yet), `language` is the
+  supplier-facing locale chosen explicitly per request (never inferred from
+  the supplier's country), and `secure_token_hash`/`token_expires_at`/
+  `token_revoked_at` implement the token design described above.
+  `ComplianceRequestProduct` is a plain join row (`request_id`,
+  `product_id`, unique together) — see [Public supplier
+  portal](#public-supplier-portal) for why there is deliberately no
+  separate "supplier answers" table.
+- **`AuditEvent`** (FASE 3) — an append-only log
+  (`REQUEST_CREATED`/`_SENT`/`_OPENED`/`_SAVED`/`_SUBMITTED`,
+  `TOKEN_REVOKED`, `EMAIL_RESENT`) written by `AuditService.record()`.
+  `actor_user_id` is null for events triggered from the public portal (no
+  authenticated user exists there); `metadata_json` is generic `JSON` on
+  SQLite, `JSONB` on Postgres, same pattern as elsewhere in this codebase.
 
-Deliberately **not** modelled yet (each ships in its own phase, per the
-roadmap, rather than being built ahead of the feature that needs it):
-`ComplianceRequest` / `ComplianceRequestProduct` (FASE 3), `SupplierDocument`
-(FASE 4), `ExtractedField` (FASE 7), `AuditEvent` (incrementally, as the
-actions worth auditing get real endpoints). When they're added, they keep
-the design decisions already agreed for them — hashed/expirable/revocable
-supplier tokens, full extraction provenance (document/page/quoted text),
-`VARCHAR` instead of native enums for evolving fields.
+Still deliberately **not** modelled (each ships in its own later phase):
+`SupplierDocument` (FASE 4), `ExtractedField` (FASE 7). When they're added,
+they keep the design decisions already agreed for them — full extraction
+provenance (document/page/quoted text), `VARCHAR` instead of native enums
+for evolving fields.
 
 Notable implementation detail: **UUID columns use a small custom `GUID`
 type** (`app/models/base.py`) instead of `postgresql.UUID` directly, so the
@@ -396,14 +426,82 @@ POST   /api/products/{id}/packaging-components
 GET    /api/products/{id}/packaging-components
 PATCH  /api/products/{id}/packaging-components/{component_id}
 
+POST   /api/requests                                          # create (DRAFT)
+GET    /api/requests
+GET    /api/requests/{id}
+POST   /api/requests/{id}/send                                # mints the token, emails it, returns request_url once
+POST   /api/requests/{id}/revoke
+POST   /api/requests/{id}/resend                               # mints a NEW token — see note below
+
+GET    /api/public/requests/{token}                            # no auth — the token IS the credential
+PATCH  /api/public/requests/{token}                            # save progress
+POST   /api/public/requests/{token}/submit
+
 POST   /api/internal/jobs/process-reminders                  # shared-secret, not user auth
 ```
 
-Every `suppliers`/`products` route requires a Supabase-authenticated user
-with a company (`get_current_company`); responses are always scoped to that
-company. `Product` and `PackagingComponent` responses include a computed
-`status` (and `missing_fields` for components) from `StatusCalculationService`
-— see [Computed status, not cached](#computed-status-not-cached).
+Every `suppliers`/`products`/`requests` route requires a
+Supabase-authenticated user with a company (`get_current_company`);
+responses are always scoped to that company. `Product` and
+`PackagingComponent` responses include a computed `status` (and
+`missing_fields` for components) from `StatusCalculationService` — see
+[Computed status, not cached](#computed-status-not-cached). The
+`/api/public/requests/*` routes take **no** auth dependency at all — see
+[Public supplier portal](#public-supplier-portal).
+
+### Public supplier portal
+
+The FASE 3 target: *"Sourcelya can send a real request to a supplier and
+receive a response back without the supplier creating an account."*
+
+**Company side** (`ComplianceRequestService`): create a `DRAFT` request for
+one supplier + one or more of that supplier's own products (both
+ownership checks run before any row is written); `send()` generates a
+token via `generate_secure_token()`, stores only `hash_token(token)`,
+emails the supplier the templated request (ES/EN, exact copy in
+`app/integrations/email/templates.py`), and returns the plaintext URL
+**exactly once** in the HTTP response — `ComplianceRequestRead` never
+includes it again afterwards, only a `has_active_link` boolean. Sending an
+already-sent request is rejected (409), not silently re-armed. `revoke()`
+sets `token_revoked_at`; **`resend()` mints a brand-new token** rather than
+re-sending the old one, because the raw token is never stored anywhere to
+resend as-is — this is a deliberate simplification (see [Technical debt
+& simplifications](#technical-debt--simplifications)) whose side effect is
+that the previous link stops working the moment a new one is issued.
+
+**Supplier side** (`PublicRequestService`, `/request/{token}` in the
+Angular app — its own standalone route, no `<app-top-nav>`, no auth
+guard): every method re-derives the `ComplianceRequest` from
+`hash_token(token)` and checks `token_revoked_at`/`token_expires_at`
+before doing anything else, so there is no code path that accepts a
+request or company id directly from the caller. The first successful
+`GET` flips `SENT -> OPENED`; `PATCH` (save progress) validates that
+**every** `component_id` in the payload belongs to one of this specific
+request's own products before writing **any** of them (all-or-nothing),
+then flips to `IN_PROGRESS`; `POST .../submit` flips to `SUBMITTED` and is
+idempotent (submitting an already-submitted request just returns it,
+rather than erroring). The public read/write schemas
+(`PublicComplianceRequestRead`, `PublicPackagingComponentUpdate`)
+deliberately never include `company_id`/`supplier_id` — a supplier's
+browser never receives Sourcelya's internal ids, not just doesn't display
+them.
+
+No separate "supplier answers" table: the public portal edits the same
+`PackagingComponent` rows (`material`, `weight_grams`,
+`recycled_content_percentage`, `packaging_reference`, `notes`) the company
+already sees on the product — see [Technical debt &
+simplifications](#technical-debt--simplifications) for why.
+
+`backend/tests/test_public_requests.py` and
+`test_compliance_requests.py` specifically cover: invalid token, expired
+token, revoked token, a component belonging to a different request, a
+component belonging to a different company's product, sending a request
+twice, resending, revoking, and idempotent submit.
+`backend/tests/test_e2e_request_flow.py` runs the entire lifecycle once,
+start to finish, through the real HTTP API: create supplier/product →
+create request → send → parse the emailed URL → open as the supplier →
+save progress → submit → confirm the company sees `SUBMITTED` with the
+supplier-provided data attached.
 
 ### Frontend
 
@@ -460,6 +558,19 @@ public supplier link:
   products and packaging components, and that a product's computed status
   flips from `orange` to `green` as its packaging component's required
   fields get filled in.
+- `test_compliance_requests.py` — company-side request lifecycle: creation
+  (rejecting a supplier/product from another company, or a product that
+  belongs to a different supplier than the one chosen), send/revoke/resend,
+  sending a request twice being rejected, and cross-tenant isolation.
+- `test_public_requests.py` — the token/public side: invalid token (404),
+  expired token (410), revoked token (403), never exposing
+  `company_id`/`supplier_id`, first-open flipping to `OPENED`, save
+  progress (including rejecting a component that belongs to a different
+  request or a different company's product), idempotent submit, and that
+  nothing can be saved after submission.
+- `test_e2e_request_flow.py` — the full request lifecycle in one real
+  HTTP-API test, company to supplier and back (see [Public supplier
+  portal](#public-supplier-portal) for what it covers).
 
 ### Integration suite (real PostgreSQL)
 
@@ -479,9 +590,13 @@ can't validate:
 - `CompanyScopedRepository` isolation holds end to end against the real
   database, not just SQLite.
 
-Deliberately not included: a `secure_token_hash` check. That column lives
-on `ComplianceRequest`, which doesn't exist until FASE 3 — a test for a
-table that isn't built yet would be decoration, not signal.
+Written before `ComplianceRequest` existed, so it doesn't cover
+`secure_token_hash`/FK behavior on the FASE 3 tables specifically — the
+fast suite's token/isolation tests (above) already exercise that logic
+against SQLite, and nothing about FASE 3's schema is a new
+SQLite-vs-Postgres divergence risk beyond what FASE 1/2 already validated
+here (same `GUID` type, same `VARCHAR`-not-native-enum status column, same
+FK pattern).
 
 Reuses `docker-compose.yml`'s `postgres` service and credentials rather
 than standing up separate test infrastructure, and truncates the app's
@@ -522,6 +637,77 @@ PostgreSQL database, not a mock.
    instantly; the data entered (product/supplier/component names) is
    unaffected, as it should be — it's data, not UI copy.
 
+**FASE 3**, same technique (real backend, real Postgres, injected session —
+see [Public supplier portal](#public-supplier-portal) for the endpoints
+involved), run in an actual Chromium browser via Playwright:
+
+1. Requests → New request → pick the supplier and its product → language
+   Spanish → create → lands on the request detail page, status `Borrador`.
+2. Click "Enviar solicitud" → status flips to `Enviada`, a green banner
+   reveals the secure link exactly once (`/request/{token}`) with a copy
+   button — refreshing the page never shows it again.
+3. Open that link in a **separate, unauthenticated browser context** (no
+   Supabase session, no app shell) → the plain public portal renders in
+   Spanish, showing only this request's company/supplier/products/
+   packaging fields — no internal ids, no top-nav.
+4. Fill in material/weight/recycled-%/notes for the one packaging
+   component → "Guardar" → progress saved, request now `IN_PROGRESS`.
+5. "Enviar solicitud" (with a confirmation prompt) → the portal shows the
+   "solicitud enviada" confirmation view, fields now read-only.
+6. Back on the authenticated side: the request detail page's timeline
+   shows all four events (Creada/Enviada/Abierta/Completada por el
+   proveedor) with real timestamps, status badge `Completada`; the
+   product detail page shows the supplier-entered packaging data, and its
+   status is now `Completo` (green).
+7. Sanity check: `/request/not-a-real-token` renders a plain "this link is
+   not valid" message — no app chrome, no stack trace, no hint of what a
+   valid token would look like.
+
+## Technical debt & simplifications
+
+Decisions made during FASE 3 to keep the scope to "close the request loop,
+nothing else" (per the phase brief), worth revisiting once real usage
+justifies it:
+
+- **No separate "supplier answers" table.** The public portal edits the
+  same `PackagingComponent` rows the company's own product page reads —
+  `material`, `weight_grams`, `recycled_content_percentage`,
+  `packaging_reference`, `notes` are exactly the fields both sides need,
+  so a parallel `ComplianceRequestAnswer` table would only duplicate data
+  and need its own sync logic. This stops being the right call the moment
+  Sourcelya needs to show *what the supplier changed* versus what was
+  already there, or needs one product to be part of two concurrent
+  requests with independently-tracked answers.
+- **`resend()` mints a new token instead of resending the old one.** The
+  raw token is never stored (only its hash), so there is nothing to
+  literally resend — issuing a fresh one and emailing it is the only
+  option, with the side effect that the previous link stops working. If a
+  future phase needs "remind without invalidating," that requires storing
+  something recoverable (e.g. a short-lived reminder-only token) instead
+  of reusing this mechanism.
+- **`review_required`/`completed` are unused states.** They exist on
+  `RequestStatus` (see `app/domain/enums.py`) because the spec named them
+  as future states, but nothing in FASE 3 transitions a request into
+  either — there's no scoring/conflict logic yet to justify
+  `review_required`, and no explicit "mark done" action for `completed`.
+- **Frontend analytics fire on every portal view, not just the first.**
+  `supplier_request_opened` fires on every successful `GET
+  /api/public/requests/{token}`, whereas the backend's `REQUEST_OPENED`
+  audit event only fires once (on the `SENT -> OPENED` transition) — the
+  public read response doesn't tell the frontend whether this was the
+  very first open. The backend audit log is the authoritative record;
+  analytics is directional, not exact, by design (see
+  `AnalyticsService`'s own docstring).
+- **New request creation is a standalone screen**, not launched from a
+  supplier detail page — there is no supplier detail page yet (Suppliers
+  is list-only since FASE 2). `/requests/new` picks the supplier from a
+  dropdown instead.
+- **No automatic reminders yet.** `reminder_count`/`last_reminder_at`
+  exist as columns (per the FASE 3 model spec) but nothing writes to them
+  — `ReminderService` still returns a no-op (see [Why not an in-process
+  scheduler](#why-not-an-in-process-scheduler-for-jobs)); real reminder
+  logic is FASE 6.
+
 ## Migrations
 
 [Alembic](https://alembic.sqlalchemy.org/), driven from `backend/alembic/`.
@@ -538,7 +724,10 @@ alembic downgrade -1                          # roll back one
 types (see [PostgreSQL enums](#postgresql-enums)). Review autogenerated
 migrations before applying — autogenerate can miss some constraint renames.
 FASE 2 added no new tables (Supplier/Product/PackagingComponent were already
-part of `0001_initial_schema.py`), so there is still only one migration.
+part of `0001_initial_schema.py`). `0002_compliance_requests.py` (FASE 3)
+adds `compliance_requests`, `compliance_request_products`, and
+`audit_events` — applied and verified against a real local PostgreSQL 16
+instance, not just SQLite.
 
 ## Project structure
 
@@ -570,7 +759,9 @@ frontend/           # app.sourcelya.com — the authenticated app, no landing co
                      # brand.ts (naming/copy), analytics.service.ts,
                      # i18n/ (LocaleService, es/en dictionaries, locale switch)
     features/       # auth (login/signup), dashboard, suppliers,
-                     # products (+ product-detail)
+                     # products (+ product-detail), requests (list/new/detail),
+                     # public-request (the standalone /request/:token portal —
+                     # no shared chrome with the rest of the app, on purpose)
     shared/         # cross-feature UI: top-nav, shared list-page styles
   src/environments/
 docker-compose.yml
@@ -596,8 +787,14 @@ suite](#integration-suite-real-postgresql) and the `Locale` enum.
   i18n](#app-i18n-whats-translated-vs-deliberately-deferred) — and verified
   against the real backend, not just visually (see [Manual
   flow](#manual-flow-verified-end-to-end)).
-- **FASE 3**: `ComplianceRequest` / `ComplianceRequestProduct` + secure
-  supplier link (`/request/{token}`).
+- **FASE 3 — done**: `ComplianceRequest` / `ComplianceRequestProduct` +
+  `AuditEvent`; the company-side request lifecycle (create, send, revoke,
+  resend) and the no-login-required public supplier portal
+  (`/request/{token}`) — see [Public supplier
+  portal](#public-supplier-portal) for the full flow, security model, and
+  tests, and [Technical debt &
+  simplifications](#technical-debt--simplifications) for what was
+  deliberately kept simple.
 - **FASE 4**: `SupplierDocument` + document uploads (Supabase Storage,
   upload validation).
 - **FASE 5**: The real dashboard (completion percentages, missing-fields

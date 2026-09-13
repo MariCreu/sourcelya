@@ -12,6 +12,29 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class UTCDateTime(TypeDecorator):
+    """Timezone-aware `DateTime` that stays aware on SQLite too.
+
+    Postgres' `DateTime(timezone=True)` round-trips an aware datetime as-is.
+    SQLite has no real timezone-aware storage: it accepts the value but
+    hands back a naive `datetime` on the next read (e.g. a later request's
+    session `SELECT`-ing a row inserted in a previous one), which then
+    blows up the moment application code compares it against
+    `datetime.now(timezone.utc)` (see PublicRequestService's token-expiry
+    check). Every column that is ever compared against "now" — anything
+    token-lifetime related — should use this instead of a bare
+    `DateTime(timezone=True)`.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_result_value(self, value, dialect):
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+
 class GUID(TypeDecorator):
     """Platform-independent UUID column.
 
@@ -50,4 +73,4 @@ class UUIDPrimaryKeyMixin:
 
 
 class TimestampMixin:
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime, default=utcnow)

@@ -8,14 +8,15 @@ the process happens to be alive. Instead, `POST /internal/jobs/process-reminders
 Supabase Cron / pg_cron calls on a schedule in production, and that can be
 invoked manually in development or tests.
 
-FASE 1 note: `ComplianceRequest` doesn't exist yet — it ships in FASE 3, and
-the reminder cadence itself (`Settings.reminder_schedule_days`) is FASE 6
-work. This class and its endpoint exist now purely so FASE 6 slots real
-logic into an already-decided shape instead of retrofitting one.
+`ComplianceRequest` exists as of FASE 3, but the reminder cadence itself
+(`Settings.reminder_schedule_days`) is still FASE 6 work — this class and
+its endpoint exist now purely so FASE 6 slots real logic into an
+already-decided shape instead of retrofitting one.
 
 Planned idempotency mechanism for FASE 6, so it isn't lost by the time we
-get there: each `ComplianceRequest` will track `reminder_count` and
-`last_reminder_at`. A reminder at schedule index `i` is due when
+get there: `ComplianceRequest` already has `reminder_count` and
+`last_reminder_at` columns (added in FASE 3, unused until FASE 6 writes to
+them). A reminder at schedule index `i` is due when
 `reminder_count == i` and `now - sent_at >= reminder_schedule_days[i]`.
 Sending the reminder and incrementing `reminder_count` must happen in the
 same transaction, guarded by `WHERE reminder_count = :i`, so running this
@@ -38,6 +39,6 @@ class ReminderService:
         self.db = db
 
     def process_due_reminders(self) -> ReminderRunResult:
-        # Nothing to remind about until ComplianceRequest exists (FASE 3).
+        # Still a no-op: the cadence logic described above is FASE 6 work.
         # Trivially idempotent: calling this repeatedly does nothing, always.
         return ReminderRunResult(reminders_sent=0)

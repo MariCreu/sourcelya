@@ -5,6 +5,7 @@ export const en: Dictionary = {
     dashboard: 'Dashboard',
     suppliers: 'Suppliers',
     products: 'Products',
+    requests: 'Requests',
     logout: 'Log out'
   },
 
@@ -145,5 +146,101 @@ export const en: Dictionary = {
     filler: 'Filler',
     outer_envelope: 'Outer envelope',
     other: 'Other'
+  },
+
+  requestStatusLabels: {
+    draft: 'Draft',
+    sent: 'Sent',
+    opened: 'Opened by supplier',
+    in_progress: 'In progress',
+    submitted: 'Completed',
+    review_required: 'Review required',
+    completed: 'Closed'
+  },
+
+  requests: {
+    pageTitle: 'Requests',
+    newButton: 'New request',
+    loading: 'Loading…',
+    loadError: 'Could not load requests.',
+    empty: 'No requests sent yet. Create the first one to ask a supplier for information.',
+    table: {
+      supplier: 'Supplier',
+      products: 'Products',
+      language: 'Language',
+      status: 'Status',
+      sentAt: 'Sent',
+      lastActivity: 'Last activity'
+    },
+    unknownValue: '—',
+    languageLabels: { es: 'Spanish', en: 'English' },
+    new: {
+      backLink: '← Back to requests',
+      title: 'New request',
+      supplierLabel: 'Supplier',
+      chooseSupplierOption: 'Choose a supplier',
+      productsLabel: 'Products to request',
+      noProductsForSupplier: 'This supplier has no products yet.',
+      languageLabel: 'Request language',
+      submit: 'Create request',
+      submitting: 'Creating…',
+      genericError: 'Could not create the request. Check the fields and try again.',
+      needsAtLeastOneProduct: 'Select at least one product.'
+    },
+    detail: {
+      backLink: '← Back to requests',
+      statusLabel: 'Status',
+      timelineHeading: 'Activity',
+      timeline: {
+        created: 'Created',
+        sent: 'Sent',
+        opened: 'Opened by supplier',
+        submitted: 'Completed by supplier'
+      },
+      productsHeading: 'Included products',
+      sendButton: 'Send request',
+      sending: 'Sending…',
+      revokeButton: 'Revoke link',
+      revoking: 'Revoking…',
+      resendButton: 'Resend email',
+      resending: 'Resending…',
+      confirmRevoke: 'Revoke this link? The supplier will no longer be able to use it.',
+      linkRevealedTitle: 'Secure link generated',
+      linkRevealedBody:
+        "It's been emailed to the supplier. For security, this link is only shown once:",
+      copyLinkButton: 'Copy link',
+      copiedLabel: 'Copied!',
+      noActiveLink: 'No link has been sent to this supplier yet.',
+      notFoundError: 'Could not load this request.',
+      actionError: 'Could not complete that action. Please try again.'
+    }
+  },
+
+  publicRequest: {
+    invalidToken: 'This link is not valid.',
+    expiredToken: 'This link has expired. Ask the company to resend the request.',
+    revokedToken: 'This link is no longer available.',
+    genericError: 'Could not load the request.',
+    loading: 'Loading…',
+    heading: (companyName: string) => `Information request from ${companyName}`,
+    subheading:
+      "No account is required. Fill in what packaging data you can and save your progress — you can come back later with this same link.",
+    productsHeading: 'Products',
+    fields: {
+      material: 'Material',
+      weightGrams: 'Weight (grams)',
+      recycledContentPercentage: 'Recycled content (%)',
+      packagingReference: 'Packaging reference',
+      notes: 'Notes'
+    },
+    saveButton: 'Save',
+    saving: 'Saving…',
+    saveSuccess: 'Progress saved.',
+    submitButton: 'Submit request',
+    submitting: 'Submitting…',
+    submitConfirm: 'Submit this request? You can still view it afterwards, but not edit it.',
+    alreadySubmittedTitle: 'Request submitted',
+    alreadySubmittedBody: 'Thank you. This request has already been submitted to the company.',
+    poweredBy: 'Managed with Sourcelya'
   }
 };

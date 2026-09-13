@@ -1,0 +1,49 @@
+<app-top-nav />
+
+<main>
+  <div class="page-header">
+    <h1>{{ t().requests.pageTitle }}</h1>
+    <a class="cta-primary" routerLink="/requests/new">{{ t().requests.newButton }}</a>
+  </div>
+
+  @if (loading()) {
+    <p class="muted">{{ t().requests.loading }}</p>
+  } @else if (errorMessage()) {
+    <p class="error">{{ errorMessage() }}</p>
+  } @else if (requests().length === 0) {
+    <div class="empty-state">
+      <p class="muted">{{ t().requests.empty }}</p>
+    </div>
+  } @else {
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>{{ t().requests.table.supplier }}</th>
+            <th>{{ t().requests.table.products }}</th>
+            <th>{{ t().requests.table.language }}</th>
+            <th>{{ t().requests.table.status }}</th>
+            <th>{{ t().requests.table.sentAt }}</th>
+            <th>{{ t().requests.table.lastActivity }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (request of requests(); track request.id) {
+            <tr class="clickable" [routerLink]="['/requests', request.id]">
+              <td>{{ request.supplier_name }}</td>
+              <td>{{ productSummary(request) }}</td>
+              <td>{{ languageLabel(request) }}</td>
+              <td>
+                <span class="status-badge {{ statusBadgeClass(request.status) }}">{{
+                  t().requestStatusLabels[request.status]
+                }}</span>
+              </td>
+              <td>{{ request.sent_at ? (request.sent_at | date: 'short') : t().requests.unknownValue }}</td>
+              <td>{{ lastActivity(request) ? (lastActivity(request) | date: 'short') : t().requests.unknownValue }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</main>

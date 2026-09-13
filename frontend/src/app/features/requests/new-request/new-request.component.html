@@ -1,0 +1,63 @@
+<app-top-nav />
+
+<main>
+  <p><a routerLink="/requests">{{ t().requests.new.backLink }}</a></p>
+
+  <div class="page-header">
+    <h1>{{ t().requests.new.title }}</h1>
+  </div>
+
+  <div class="card form-card">
+    <form (ngSubmit)="createRequest()">
+      <label>
+        {{ t().requests.new.supplierLabel }}
+        <select name="supplierId" [(ngModel)]="supplierId" (ngModelChange)="onSupplierChange()" required>
+          <option value="" disabled>{{ t().requests.new.chooseSupplierOption }}</option>
+          @for (supplier of suppliers(); track supplier.id) {
+            <option [value]="supplier.id">{{ supplier.name }}</option>
+          }
+        </select>
+      </label>
+
+      @if (supplierId) {
+        <div>
+          <span class="field-label">{{ t().requests.new.productsLabel }}</span>
+          @if (productsForSupplier().length === 0) {
+            <p class="muted">{{ t().requests.new.noProductsForSupplier }}</p>
+          } @else {
+            <ul class="checkbox-list">
+              @for (product of productsForSupplier(); track product.id) {
+                <li>
+                  <label class="checkbox-label">
+                    <input
+                      type="checkbox"
+                      [checked]="isProductSelected(product.id)"
+                      (change)="toggleProduct(product.id, $any($event.target).checked)"
+                    />
+                    {{ product.name }}
+                  </label>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+
+      <label>
+        {{ t().requests.new.languageLabel }}
+        <select name="language" [(ngModel)]="language" required>
+          <option value="es">{{ t().requests.languageLabels.es }}</option>
+          <option value="en">{{ t().requests.languageLabels.en }}</option>
+        </select>
+      </label>
+
+      @if (errorMessage()) {
+        <p class="error">{{ errorMessage() }}</p>
+      }
+
+      <button type="submit" [disabled]="submitting() || !supplierId">
+        {{ submitting() ? t().requests.new.submitting : t().requests.new.submit }}
+      </button>
+    </form>
+  </div>
+</main>

@@ -41,5 +41,37 @@ export const routes: Routes = [
         (m) => m.ProductDetailComponent
       )
   },
+  {
+    path: 'requests',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/requests/requests.component').then((m) => m.RequestsComponent)
+  },
+  {
+    path: 'requests/new',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/requests/new-request/new-request.component').then(
+        (m) => m.NewRequestComponent
+      )
+  },
+  {
+    path: 'requests/:requestId',
+    canActivate: [authGuard],
+    loadComponent: () =>
+      import('./features/requests/request-detail/request-detail.component').then(
+        (m) => m.RequestDetailComponent
+      )
+  },
+  {
+    // The supplier's public portal — deliberately NOT behind authGuard and
+    // NOT using TopNavComponent: a supplier never logs in (see FASE 3
+    // spec), so this route must never render the authenticated app's nav.
+    path: 'request/:token',
+    loadComponent: () =>
+      import('./features/public-request/public-request.component').then(
+        (m) => m.PublicRequestComponent
+      )
+  },
   { path: '**', redirectTo: '' }
 ];

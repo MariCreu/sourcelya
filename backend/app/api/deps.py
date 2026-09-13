@@ -6,9 +6,12 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.core.security import InvalidTokenError, SupabaseIdentity, decode_supabase_access_token
+from app.integrations.email.base import EmailSender
+from app.integrations.email.factory import get_email_sender
 from app.models.company import Company
 from app.models.user import User
 from app.services.company_service import CompanyService
+from app.services.email_service import EmailService
 from app.services.user_service import UserService
 
 _bearer_scheme = HTTPBearer(auto_error=True)
@@ -62,3 +65,7 @@ def get_current_company(user: User = Depends(get_current_user), db: Session = De
     if company is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
     return company
+
+
+def get_email_service(sender: EmailSender = Depends(get_email_sender)) -> EmailService:
+    return EmailService(sender)

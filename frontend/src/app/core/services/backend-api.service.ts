@@ -4,11 +4,17 @@ import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Company, CreateCompanyPayload, CurrentUser } from './company.models';
 import {
+  ComplianceRequest,
+  ComplianceRequestSendResult,
+  CreateComplianceRequestPayload
+} from './compliance-request.models';
+import {
   CreatePackagingComponentPayload,
   PackagingComponent,
   UpdatePackagingComponentPayload
 } from './packaging-component.models';
 import { CreateProductPayload, Product, ProductDetail, UpdateProductPayload } from './product.models';
+import { PublicComplianceRequest, SavePublicRequestPayload } from './public-request.models';
 import { CreateSupplierPayload, Supplier, UpdateSupplierPayload } from './supplier.models';
 
 @Injectable({ providedIn: 'root' })
@@ -70,6 +76,60 @@ export class BackendApiService {
     return this.http.patch<PackagingComponent>(
       `${this.baseUrl}/products/${productId}/packaging-components/${componentId}`,
       payload
+    );
+  }
+
+  listRequests(): Observable<ComplianceRequest[]> {
+    return this.http.get<ComplianceRequest[]>(`${this.baseUrl}/requests`);
+  }
+
+  getRequest(requestId: string): Observable<ComplianceRequest> {
+    return this.http.get<ComplianceRequest>(`${this.baseUrl}/requests/${requestId}`);
+  }
+
+  createRequest(payload: CreateComplianceRequestPayload): Observable<ComplianceRequest> {
+    return this.http.post<ComplianceRequest>(`${this.baseUrl}/requests`, payload);
+  }
+
+  sendRequest(requestId: string): Observable<ComplianceRequestSendResult> {
+    return this.http.post<ComplianceRequestSendResult>(
+      `${this.baseUrl}/requests/${requestId}/send`,
+      {}
+    );
+  }
+
+  revokeRequest(requestId: string): Observable<ComplianceRequest> {
+    return this.http.post<ComplianceRequest>(`${this.baseUrl}/requests/${requestId}/revoke`, {});
+  }
+
+  resendRequest(requestId: string): Observable<ComplianceRequestSendResult> {
+    return this.http.post<ComplianceRequestSendResult>(
+      `${this.baseUrl}/requests/${requestId}/resend`,
+      {}
+    );
+  }
+
+  // --- Public supplier portal: no auth, no company scoping — the token
+  // itself is the only credential (see backend PublicRequestService). ---
+
+  getPublicRequest(token: string): Observable<PublicComplianceRequest> {
+    return this.http.get<PublicComplianceRequest>(`${this.baseUrl}/public/requests/${token}`);
+  }
+
+  savePublicRequest(
+    token: string,
+    payload: SavePublicRequestPayload
+  ): Observable<PublicComplianceRequest> {
+    return this.http.patch<PublicComplianceRequest>(
+      `${this.baseUrl}/public/requests/${token}`,
+      payload
+    );
+  }
+
+  submitPublicRequest(token: string): Observable<PublicComplianceRequest> {
+    return this.http.post<PublicComplianceRequest>(
+      `${this.baseUrl}/public/requests/${token}/submit`,
+      {}
     );
   }
 }

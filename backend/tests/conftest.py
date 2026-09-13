@@ -14,11 +14,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_email_service
 from app.core.config import get_settings
 from app.core.database import Base
 from app.core.security import get_token_verifier
 from app.main import app
+from app.services.email_service import EmailService
+from tests.fakes import RecordingEmailSender
 
 get_settings.cache_clear()
 get_token_verifier.cache_clear()
@@ -96,3 +98,17 @@ def auth_header():
 @pytest.fixture
 def internal_jobs_header():
     return {"X-Internal-Jobs-Secret": settings.internal_jobs_secret}
+
+
+@pytest.fixture
+def recording_email_sender():
+    """Overrides the email dependency for the duration of one test so the
+    request/reminder flow never depends on (or tries to reach) a real
+    provider — see EmailSender/ConsoleEmailSender/ResendEmailSender.
+    """
+    sender = RecordingEmailSender()
+    app.dependency_overrides[get_email_service] = lambda: EmailService(sender)
+    try:
+        yield sender
+    finally:
+        del app.dependency_overrides[get_email_service]

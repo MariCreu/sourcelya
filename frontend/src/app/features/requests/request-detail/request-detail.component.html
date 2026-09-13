@@ -1,0 +1,99 @@
+<app-top-nav />
+
+<main>
+  @if (loading()) {
+    <p class="muted">{{ t().requests.loading }}</p>
+  } @else if (!request()) {
+    <p class="error">{{ errorMessage() }}</p>
+  } @else {
+    <p><a routerLink="/requests">{{ t().requests.detail.backLink }}</a></p>
+
+    <div class="page-header">
+      <h1>{{ request()!.supplier_name }}</h1>
+      <span class="status-badge {{ statusBadgeClass(request()!.status) }}">{{
+        t().requestStatusLabels[request()!.status]
+      }}</span>
+    </div>
+
+    @if (revealedUrl()) {
+      <div class="link-reveal">
+        <p><strong>{{ t().requests.detail.linkRevealedTitle }}</strong></p>
+        <p>{{ t().requests.detail.linkRevealedBody }}</p>
+        <code>{{ revealedUrl() }}</code>
+        <button type="button" class="secondary-button" (click)="copyLink()">
+          {{ copied() ? t().requests.detail.copiedLabel : t().requests.detail.copyLinkButton }}
+        </button>
+      </div>
+    }
+
+    @if (actionError()) {
+      <p class="error">{{ actionError() }}</p>
+    }
+
+    <div class="actions-row">
+      @if (request()!.status === 'draft') {
+        <button class="cta-primary" [disabled]="sending()" (click)="send()">
+          {{ sending() ? t().requests.detail.sending : t().requests.detail.sendButton }}
+        </button>
+      }
+      @if (request()!.has_active_link) {
+        <button class="secondary-button" [disabled]="resending()" (click)="resend()">
+          {{ resending() ? t().requests.detail.resending : t().requests.detail.resendButton }}
+        </button>
+        <button class="secondary-button" [disabled]="revoking()" (click)="revoke()">
+          {{ revoking() ? t().requests.detail.revoking : t().requests.detail.revokeButton }}
+        </button>
+      } @else if (request()!.status === 'draft') {
+        <span class="muted">{{ t().requests.detail.noActiveLink }}</span>
+      }
+    </div>
+
+    <h2>{{ t().requests.detail.timelineHeading }}</h2>
+    <div class="card">
+      <ul class="timeline">
+        <li>
+          <span>{{ t().requests.detail.timeline.created }}</span>
+          <span>{{ request()!.created_at | date: 'medium' }}</span>
+        </li>
+        @if (request()!.sent_at) {
+          <li>
+            <span>{{ t().requests.detail.timeline.sent }}</span>
+            <span>{{ request()!.sent_at | date: 'medium' }}</span>
+          </li>
+        }
+        @if (request()!.opened_at) {
+          <li>
+            <span>{{ t().requests.detail.timeline.opened }}</span>
+            <span>{{ request()!.opened_at | date: 'medium' }}</span>
+          </li>
+        }
+        @if (request()!.submitted_at) {
+          <li>
+            <span>{{ t().requests.detail.timeline.submitted }}</span>
+            <span>{{ request()!.submitted_at | date: 'medium' }}</span>
+          </li>
+        }
+      </ul>
+    </div>
+
+    <h2>{{ t().requests.detail.productsHeading }}</h2>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>{{ t().products.table.name }}</th>
+            <th>{{ t().products.table.sku }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (product of request()!.products; track product.product_id) {
+            <tr>
+              <td>{{ product.product_name }}</td>
+              <td>{{ product.product_sku || t().requests.unknownValue }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</main>

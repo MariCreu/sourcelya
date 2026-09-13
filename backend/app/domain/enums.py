@@ -44,18 +44,14 @@ class ComplianceStatus(str, Enum):
 
 
 class Locale(str, Enum):
-    """Reserved for two future, related uses — kept as one shared type
-    rather than two, since they're the same concept:
+    """One shared type for two related uses, since they're the same concept:
 
-    1. `ComplianceRequest.language` (FASE 3): the request/email/public
-       supplier portal all need to speak the language the *supplier* works
-       in, which is independent of the buyer company's own language — a
-       Spanish company can have a supplier in Germany or China. That column
-       doesn't exist yet (`ComplianceRequest` isn't built until FASE 3);
-       this enum exists now purely so that column has an obvious, already-
-       agreed type to use instead of inventing one under time pressure.
-    2. The Angular app's own locale switching, if/when it's implemented —
-       see frontend README for why that isn't built out yet either.
+    1. `ComplianceRequest.language` — the request/email/public supplier
+       portal all speak the language the *supplier* works in, independent
+       of the buyer company's own language: a Spanish company can have a
+       supplier in Germany or China. Chosen explicitly by the company user
+       per request, never inferred from the supplier's country.
+    2. The Angular app's own locale switching (`frontend/src/app/core/i18n/`).
 
     Only ES/EN for now, matching the initial Spain-first go-to-market — not
     a statement that Sourcelya only ever supports two languages.
@@ -63,3 +59,41 @@ class Locale(str, Enum):
 
     ES = "es"
     EN = "en"
+
+
+class RequestStatus(str, Enum):
+    """Stored as VARCHAR on `ComplianceRequest.status` (see this module's
+    docstring for why) — a linear state machine, advanced only by
+    `ComplianceRequestService`/`PublicRequestService`, never set directly:
+
+        DRAFT -> SENT -> OPENED -> IN_PROGRESS -> SUBMITTED
+
+    `REVIEW_REQUIRED` and `COMPLETED` exist as states a later phase can move
+    a request into (once there's a reason to — conflicting/low-confidence
+    data, a company explicitly marking a request done) but nothing in FASE 3
+    transitions a request into either yet.
+    """
+
+    DRAFT = "draft"
+    SENT = "sent"
+    OPENED = "opened"
+    IN_PROGRESS = "in_progress"
+    SUBMITTED = "submitted"
+    REVIEW_REQUIRED = "review_required"
+    COMPLETED = "completed"
+
+
+class AuditEventType(str, Enum):
+    """What gets recorded in `AuditEvent.event_type`. Expected to grow as
+    later phases add more auditable actions (document uploads, reminders,
+    extracted-field decisions, ...) — VARCHAR, not a native enum, for the
+    same reason as `PackagingType`.
+    """
+
+    REQUEST_CREATED = "request_created"
+    REQUEST_SENT = "request_sent"
+    REQUEST_OPENED = "request_opened"
+    REQUEST_SAVED = "request_saved"
+    REQUEST_SUBMITTED = "request_submitted"
+    TOKEN_REVOKED = "token_revoked"
+    EMAIL_RESENT = "email_resent"

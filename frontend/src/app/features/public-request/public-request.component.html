@@ -1,0 +1,120 @@
+<main class="portal">
+  @if (loading()) {
+    <p class="muted">Loading…</p>
+  } @else if (loadError()) {
+    <div class="card error-card">
+      @switch (loadError()) {
+        @case ('invalid') {
+          <p>{{ pt().invalidToken }}</p>
+        }
+        @case ('expired') {
+          <p>{{ pt().expiredToken }}</p>
+        }
+        @case ('revoked') {
+          <p>{{ pt().revokedToken }}</p>
+        }
+        @default {
+          <p>{{ pt().genericError }}</p>
+        }
+      }
+    </div>
+  } @else if (request()) {
+    <header class="portal-header">
+      <h1>{{ pt().heading(request()!.company_name) }}</h1>
+      <p class="muted">{{ pt().subheading }}</p>
+    </header>
+
+    @if (isFinal()) {
+      <div class="card success-card">
+        <h2>{{ pt().alreadySubmittedTitle }}</h2>
+        <p>{{ pt().alreadySubmittedBody }}</p>
+      </div>
+    }
+
+    <h2>{{ pt().productsHeading }}</h2>
+
+    @for (product of request()!.products; track product.id) {
+      <div class="card product-card">
+        <h3>{{ product.name }}</h3>
+
+        @for (component of product.packaging_components; track component.id) {
+          <div class="component-block">
+            <h4>{{ component.name }}</h4>
+            <div class="field-grid">
+              <label>
+                {{ pt().fields.material }}
+                <input
+                  type="text"
+                  [ngModel]="formValues()[component.id]?.material"
+                  [disabled]="isFinal()"
+                  (ngModelChange)="updateField(component.id, 'material', $event)"
+                />
+              </label>
+              <label>
+                {{ pt().fields.weightGrams }}
+                <input
+                  type="number"
+                  min="0"
+                  [ngModel]="formValues()[component.id]?.weight_grams"
+                  [disabled]="isFinal()"
+                  (ngModelChange)="updateField(component.id, 'weight_grams', $event)"
+                />
+              </label>
+              <label>
+                {{ pt().fields.recycledContentPercentage }}
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  [ngModel]="formValues()[component.id]?.recycled_content_percentage"
+                  [disabled]="isFinal()"
+                  (ngModelChange)="updateField(component.id, 'recycled_content_percentage', $event)"
+                />
+              </label>
+              <label>
+                {{ pt().fields.packagingReference }}
+                <input
+                  type="text"
+                  [ngModel]="formValues()[component.id]?.packaging_reference"
+                  [disabled]="isFinal()"
+                  (ngModelChange)="updateField(component.id, 'packaging_reference', $event)"
+                />
+              </label>
+              <label class="full-width">
+                {{ pt().fields.notes }}
+                <textarea
+                  rows="2"
+                  [ngModel]="formValues()[component.id]?.notes"
+                  [disabled]="isFinal()"
+                  (ngModelChange)="updateField(component.id, 'notes', $event)"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+        }
+      </div>
+    }
+
+    @if (!isFinal()) {
+      @if (saveMessage()) {
+        <p class="success-text">{{ saveMessage() }}</p>
+      }
+      @if (actionError()) {
+        <p class="error">{{ actionError() }}</p>
+      }
+
+      <div class="actions-row">
+        <button type="button" class="secondary-button" [disabled]="saving()" (click)="save()">
+          {{ saving() ? pt().saving : pt().saveButton }}
+        </button>
+        <button type="button" class="cta-primary" [disabled]="submitting()" (click)="submit()">
+          {{ submitting() ? pt().submitting : pt().submitButton }}
+        </button>
+      </div>
+    }
+
+    <footer class="portal-footer">
+      <span>{{ pt().poweredBy }}</span>
+    </footer>
+  }
+</main>
