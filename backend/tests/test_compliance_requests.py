@@ -243,3 +243,24 @@ def test_requests_are_isolated_between_companies(client, auth_header):
     assert (
         client.post(f"/api/requests/{request_a['id']}/send", headers=headers_b).status_code == 404
     )
+
+
+def test_list_requests_with_existing_requests(client, auth_header):
+    """Regression test: GET /api/requests used to crash for any company with
+    at least one request — `_read()` was called positionally with only
+    `(db, request)`, silently binding `request` to the `company_id`
+    parameter, once `_read` grew a `company_id` argument for FASE 5's
+    extracted-fields lookup. An empty list never exercised the call at all,
+    so it went unnoticed until a non-empty list was tested."""
+    headers = auth_header(user_id=USER_A)
+    _onboard(client, headers)
+    supplier, product = _setup_supplier_with_product(client, headers)
+    client.post(
+        "/api/requests",
+        json={"supplier_id": supplier["id"], "product_ids": [product["id"]], "language": "es"},
+        headers=headers,
+    )
+
+    response = client.get("/api/requests", headers=headers)
+    assert response.status_code == 200
+    assert len(response.json()) == 1

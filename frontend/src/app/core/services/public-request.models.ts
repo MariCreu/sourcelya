@@ -19,6 +19,11 @@ export interface PublicProduct {
   packaging_components: PublicPackagingComponent[];
 }
 
+export interface PublicMissingFieldRef {
+  packaging_component_id: string;
+  field_name: string;
+}
+
 export interface PublicComplianceRequest {
   // Deliberately no company_id/supplier_id: the public API never sends
   // them (see backend PublicComplianceRequestRead) so a supplier's browser
@@ -30,6 +35,10 @@ export interface PublicComplianceRequest {
   submitted_at: string | null;
   products: PublicProduct[];
   documents: PublicSupplierDocument[];
+  // FASE 6: non-empty once the supplier has submitted before and
+  // something is still outstanding — drives the "ALMOST THERE" scoped
+  // view (see PublicRequestComponent).
+  missing_fields: PublicMissingFieldRef[];
 }
 
 export interface PublicPackagingComponentUpdate {

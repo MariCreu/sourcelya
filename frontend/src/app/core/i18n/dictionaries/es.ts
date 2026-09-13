@@ -153,9 +153,11 @@ export const es: Dictionary = {
     sent: 'Enviada',
     opened: 'Abierta por el proveedor',
     in_progress: 'En progreso',
-    submitted: 'Completada',
+    submitted: 'Enviada por el proveedor',
+    missing_information: 'Falta información',
     review_required: 'Requiere revisión',
-    completed: 'Cerrada'
+    conflict: 'Conflicto',
+    completed: 'Completa'
   },
 
   requests: {
@@ -271,7 +273,39 @@ export const es: Dictionary = {
       conflictCurrentLabel: 'Valor actual:',
       conflictExtractedLabel: 'Valor extraído:',
       useExtractedButton: 'Usar valor extraído',
-      keepCurrentButton: 'Mantener valor actual'
+      keepCurrentButton: 'Mantener valor actual',
+      informationStatusHeading: 'Estado de la información',
+      fieldsAvailable: (available: number, total: number) =>
+        `${available} / ${total} campos solicitados disponibles`,
+      availableHeading: 'Disponible',
+      missingHeading: 'Falta',
+      reviewRequiredHeading: 'Requiere revisión',
+      conflictHeading: 'Conflicto',
+      noneLabel: 'Ninguno',
+      unresolvedPendingMessage: (n: number) =>
+        `${n} extracción(es) necesitan que indiques a qué componente pertenecen antes de continuar`,
+      requestMissingInfoButton: 'Solicitar información faltante',
+      requestingFollowUp: 'Enviando…',
+      followUpSentMessage: 'Se ha enviado la solicitud de información faltante.',
+      followUpBlockedNothingMissing: 'No falta ninguna información en esta solicitud.',
+      followUpBlockedProcessing: 'Espera a que termine de procesarse un documento.',
+      followUpBlockedReviewRequired:
+        'Resuelve las extracciones pendientes de revisión o los conflictos antes de solicitar más información.',
+      followUpBlockedDuplicate: 'Ya se solicitó exactamente esta misma información.',
+      followUpBlockedNotEligible: 'Esta solicitud no admite un nuevo seguimiento ahora mismo.',
+      automaticFollowUpLabel: 'Seguimiento automático',
+      automaticFollowUpHint:
+        'Si se activa, Sourcelya solicitará automáticamente la información que falte cuando no haya conflictos ni revisiones pendientes (máximo 3 rondas automáticas).',
+      followUpRoundsHeading: 'Historial de seguimiento',
+      roundLabel: (n: number) => `Ronda ${n}`,
+      roundTriggerManual: 'manual',
+      roundTriggerAutomatic: 'automático',
+      roundFieldCount: (n: number) => `${n} campo(s) solicitado(s)`,
+      recoveryHeading: 'Tasa de recuperación de información',
+      recoveryText: (available: number, total: number, rate: number) =>
+        `${available} / ${total} campos disponibles (${Math.round(rate * 100)}%)`,
+      recoveryFollowUpText: (recovered: number) =>
+        `${recovered} campo(s) adicionales recuperados gracias al seguimiento`
     }
   },
 
@@ -300,6 +334,15 @@ export const es: Dictionary = {
     submitConfirm: '¿Enviar la solicitud? Podrás seguir viéndola, pero no editarla después.',
     alreadySubmittedTitle: 'Solicitud enviada',
     alreadySubmittedBody: 'Gracias. Esta solicitud ya ha sido enviada a la empresa.',
+    almostThereTitle: 'Ya casi está',
+    almostThereBody: 'Gracias por la información que ya nos has enviado. Solo necesitamos:',
+    almostThereFieldLabels: {
+      packaging_type: 'Tipo de packaging',
+      material: 'Material',
+      weight_grams: 'Peso',
+      recycled_content_percentage: 'Contenido reciclado',
+      packaging_reference: 'Referencia de packaging'
+    },
     poweredBy: 'Gestionado con Sourcelya',
     documentsHeading: 'Documentos',
     documentsHint: 'Adjunta fichas técnicas, declaraciones u otra documentación relevante (PDF, XLSX, CSV, DOCX, PNG, JPG).',

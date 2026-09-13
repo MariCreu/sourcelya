@@ -114,6 +114,19 @@ export class BackendApiService {
     );
   }
 
+  // --- FASE 6: missing-information follow-up loop. ---
+
+  createFollowUp(requestId: string): Observable<ComplianceRequest> {
+    return this.http.post<ComplianceRequest>(`${this.baseUrl}/requests/${requestId}/follow-up`, {});
+  }
+
+  setAutomaticFollowUp(requestId: string, enabled: boolean): Observable<ComplianceRequest> {
+    return this.http.post<ComplianceRequest>(
+      `${this.baseUrl}/requests/${requestId}/automatic-follow-up`,
+      { enabled }
+    );
+  }
+
   // --- Public supplier portal: no auth, no company scoping — the token
   // itself is the only credential (see backend PublicRequestService). ---
 

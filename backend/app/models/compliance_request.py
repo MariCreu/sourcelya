@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -46,6 +46,18 @@ class ComplianceRequest(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     reminder_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_reminder_at: Mapped[datetime | None] = mapped_column(UTCDateTime, nullable=True)
+
+    # FASE 6: opt-in, per-request. Never defaults to True — see
+    # FollowUpService module docstring for why the company keeps control
+    # during validation.
+    automatic_follow_up: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Snapshot taken once, the first time the supplier ever submits — the
+    # one historical data point PackagingComponent's lack of versioning
+    # can't reconstruct later. Everything else the recovery-rate metric
+    # needs is computed live. See MissingInformationService.recovery_stats.
+    fields_available_after_first_submission: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
 
     products: Mapped[list["ComplianceRequestProduct"]] = relationship(
         back_populates="request", cascade="all, delete-orphan"

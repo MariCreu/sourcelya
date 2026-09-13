@@ -3,8 +3,9 @@ import secrets
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_email_service
 from app.core.config import get_settings
+from app.services.email_service import EmailService
 from app.services.reminder_service import ReminderService
 
 router = APIRouter(prefix="/internal/jobs", tags=["internal"])
@@ -27,6 +28,8 @@ def verify_internal_jobs_secret(x_internal_jobs_secret: str = Header(default="")
 
 
 @router.post("/process-reminders", dependencies=[Depends(verify_internal_jobs_secret)])
-def process_reminders(db: Session = Depends(get_db)) -> dict:
-    result = ReminderService(db).process_due_reminders()
+def process_reminders(
+    db: Session = Depends(get_db), email_service: EmailService = Depends(get_email_service)
+) -> dict:
+    result = ReminderService(db, email_service).process_due_reminders()
     return {"reminders_sent": result.reminders_sent}

@@ -104,16 +104,21 @@ def test_full_supplier_request_lifecycle(client, auth_header, recording_email_se
         == "in_progress"
     )
 
-    # 7. Supplier submits.
+    # 7. Supplier submits. FASE 6: the supplier provided every requested
+    #    field above, so submitting now takes the request all the way to
+    #    COMPLETED — not just SUBMITTED — since MissingInformationService
+    #    finds nothing left missing/pending/conflicting. See
+    #    FollowUpService.reevaluate, called right after submit().
     submitted = client.post(f"/api/public/requests/{token}/submit")
     assert submitted.status_code == 200
-    assert submitted.json()["status"] == "submitted"
+    assert submitted.json()["status"] == "completed"
 
-    # 8. Company sees SUBMITTED, with the supplier-provided data attached.
+    # 8. Company sees COMPLETED, with the supplier-provided data attached.
     final = client.get(f"/api/requests/{request['id']}", headers=headers)
     assert final.status_code == 200
-    assert final.json()["status"] == "submitted"
+    assert final.json()["status"] == "completed"
     assert final.json()["submitted_at"] is not None
+    assert final.json()["completed_at"] is not None
 
     final_product = client.get(f"/api/products/{product['id']}", headers=headers).json()
     saved_component = final_product["packaging_components"][0]

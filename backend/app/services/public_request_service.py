@@ -9,8 +9,14 @@ from app.models.compliance_request import ComplianceRequest
 from app.repositories.compliance_request_repository import ComplianceRequestRepository
 from app.schemas.public_request import PublicSaveRequestPayload
 from app.services.audit_service import AuditService
+from app.services.missing_information_service import MissingInformationService
 
-_TERMINAL_STATUSES = {RequestStatus.SUBMITTED.value, RequestStatus.COMPLETED.value}
+# FASE 6: COMPLETED is the only true terminal state now. SUBMITTED no
+# longer blocks edits — a supplier legitimately edits again during a
+# follow-up round (see FollowUpService), and `save_progress`/`submit` are
+# both re-callable across rounds. See RequestStatus's own docstring for the
+# updated state machine.
+_TERMINAL_STATUSES = {RequestStatus.COMPLETED.value}
 
 
 class InvalidTokenError(Exception):
@@ -125,19 +131,44 @@ class PublicRequestService:
         return request
 
     def submit(self, raw_token: str) -> ComplianceRequest:
+        """Marks the supplier's current round of input as done — it does
+        **not** decide completeness (see FASE 6's "supplier submission
+        should never close the request by itself"). The caller (the API
+        endpoint) is responsible for running `FollowUpService.reevaluate()`
+        right after this, exactly once, with the company/email context this
+        service deliberately doesn't have (it only ever knows a token).
+
+        Re-callable across follow-up rounds: only truly idempotent once
+        `COMPLETED` (nothing left to submit). The first-ever submission
+        additionally snapshots how many requested fields were already
+        available then — see `ComplianceRequest.
+        fields_available_after_first_submission`'s docstring for why that
+        one snapshot can't be reconstructed after the fact.
+        """
         request = self._resolve(raw_token)
         if request.status in _TERMINAL_STATUSES:
-            # Idempotent: a repeated submit (e.g. a double click, or a
-            # retried request) doesn't error, it just confirms.
             return request
 
-        request.status = RequestStatus.SUBMITTED.value
+        is_first_submission = request.submitted_at is None
         request.submitted_at = datetime.now(timezone.utc)
+        request.status = RequestStatus.SUBMITTED.value
         self.db.flush()
-        self.audit_service.record(
-            company_id=request.company_id,
-            event_type=AuditEventType.REQUEST_SUBMITTED,
-            entity_type="compliance_request",
-            entity_id=request.id,
-        )
+
+        if is_first_submission:
+            summary = MissingInformationService(self.db).summarize(request.company_id, request)
+            request.fields_available_after_first_submission = summary.available_count
+            self.db.flush()
+            self.audit_service.record(
+                company_id=request.company_id,
+                event_type=AuditEventType.REQUEST_SUBMITTED,
+                entity_type="compliance_request",
+                entity_id=request.id,
+            )
+        else:
+            self.audit_service.record(
+                company_id=request.company_id,
+                event_type=AuditEventType.SUPPLIER_RESUBMITTED,
+                entity_type="compliance_request",
+                entity_id=request.id,
+            )
         return request

@@ -181,11 +181,50 @@ def test_submit_sets_status_and_is_idempotent(client, auth_header):
     assert company_view["submitted_at"] is not None
 
 
-def test_cannot_save_progress_after_submit(client, auth_header):
+def test_can_still_save_progress_after_submit_when_information_still_missing(client, auth_header):
+    """FASE 6: submitting no longer locks the request — a supplier must be
+    able to keep adding information (directly, or via a follow-up round)
+    right up until the request is genuinely COMPLETE. See
+    RequestStatus/PublicRequestService's updated docstrings."""
     headers = auth_header(user_id=USER_A)
     _onboard(client, headers)
     request, token, component = _send_full_request(client, headers)
     client.post(f"/api/public/requests/{token}/submit")
+
+    response = client.patch(
+        f"/api/public/requests/{token}",
+        json={"components": [{"id": component["id"], "material": "plastic"}]},
+    )
+    assert response.status_code == 200
+
+
+def test_cannot_save_progress_once_request_is_complete(client, auth_header):
+    headers = auth_header(user_id=USER_A)
+    _onboard(client, headers)
+    supplier = _create_supplier(client, headers)
+    product = _create_product(client, headers, supplier["id"])
+    component = client.post(
+        f"/api/products/{product['id']}/packaging-components",
+        json={
+            "name": "Outer box",
+            "packaging_type": "box",
+            "material": "Cardboard",
+            "weight_grams": 42,
+            "recycled_content_percentage": 10,
+            "packaging_reference": "REF-1",
+        },
+        headers=headers,
+    ).json()
+    request = client.post(
+        "/api/requests",
+        json={"supplier_id": supplier["id"], "product_ids": [product["id"]], "language": "es"},
+        headers=headers,
+    ).json()
+    sent = client.post(f"/api/requests/{request['id']}/send", headers=headers).json()
+    token = sent["request_url"].rsplit("/", 1)[-1]
+
+    submit_response = client.post(f"/api/public/requests/{token}/submit")
+    assert submit_response.json()["status"] == "completed"
 
     response = client.patch(
         f"/api/public/requests/{token}",

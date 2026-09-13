@@ -229,6 +229,65 @@ table {
   }
 }
 
+.information-status-summary {
+  font-size: 16px;
+  margin: 0 0 16px;
+}
+
+.component-information-block {
+  margin-bottom: 16px;
+
+  h4 {
+    margin: 0 0 8px;
+    font-size: 14px;
+  }
+}
+
+.field-information-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+  }
+}
+
+.automatic-follow-up-toggle {
+  margin-top: 16px;
+}
+
+.automatic-follow-up-hint {
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
+.follow-up-rounds-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  li {
+    display: flex;
+    gap: 10px;
+    font-size: 13px;
+  }
+}
+
+.fields-fraction {
+  margin-left: 8px;
+  font-size: 12px;
+}
+
 .doc-actions {
   display: flex;
   gap: 8px;

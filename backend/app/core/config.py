@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     # Reminders (centralized, never hardcode elsewhere)
     reminder_schedule_days: List[int] = [3, 7, 14]
 
+    # FASE 6: cap on *automatic* follow-up rounds — manual follow-up (a
+    # human clicking the button) is never capped, since a person is already
+    # making the decision each time. See FollowUpService.
+    max_automatic_follow_up_rounds: int = 3
+
     # Uploads
     max_upload_size_mb: int = 20
     allowed_upload_extensions: List[str] = ["pdf", "xlsx", "csv", "docx", "png", "jpg", "jpeg"]

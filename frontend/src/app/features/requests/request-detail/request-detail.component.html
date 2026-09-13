@@ -10,8 +10,8 @@
 
     <div class="page-header">
       <h1>{{ request()!.supplier_name }}</h1>
-      <span class="status-badge {{ statusBadgeClass(request()!.status) }}">{{
-        t().requestStatusLabels[request()!.status]
+      <span class="status-badge {{ statusBadgeClass(request()!) }}">{{
+        t().requestStatusLabels[statusLabelKey(request()!)]
       }}</span>
     </div>
 
@@ -95,6 +95,105 @@
         </tbody>
       </table>
     </div>
+
+    @if (request()!.information_status; as info) {
+      <h2>{{ t().requests.detail.informationStatusHeading }}</h2>
+      <div class="card">
+        <p class="information-status-summary">
+          <strong>{{ t().requests.detail.fieldsAvailable(info.available_count, info.total_requested) }}</strong>
+        </p>
+
+        @for (component of info.components; track component.component_id) {
+          <div class="component-information-block">
+            <h4>{{ component.component_name }}</h4>
+            <ul class="field-information-list">
+              @for (field of component.fields; track field.field_name) {
+                <li>
+                  <span class="status-badge {{ fieldInformationBadgeClass(field.state) }}">{{
+                    fieldLabel(field.field_name)
+                  }}</span>
+                  @if (field.state === 'available') {
+                    <span class="muted">{{ field.current_value }}</span>
+                  } @else if (field.state === 'conflict') {
+                    <span class="muted"
+                      >{{ t().requests.detail.conflictCurrentLabel }} {{ field.current_value }} ·
+                      {{ t().requests.detail.conflictExtractedLabel }} {{ field.extracted_value }}</span
+                    >
+                  } @else if (field.state === 'review_required') {
+                    <span class="muted">{{ field.extracted_value }}</span>
+                  }
+                </li>
+              }
+            </ul>
+          </div>
+        }
+
+        @if (info.unresolved_pending_count > 0) {
+          <p class="error">
+            {{ t().requests.detail.unresolvedPendingMessage(info.unresolved_pending_count) }}
+          </p>
+        }
+
+        @if (followUpMessage()) {
+          <p class="success-text">{{ followUpMessage() }}</p>
+        }
+        @if (followUpError()) {
+          <p class="error">{{ followUpError() }}</p>
+        }
+
+        <div class="actions-row">
+          <button
+            type="button"
+            class="cta-primary"
+            [disabled]="requestingFollowUp()"
+            (click)="requestMissingInfo()"
+          >
+            {{
+              requestingFollowUp()
+                ? t().requests.detail.requestingFollowUp
+                : t().requests.detail.requestMissingInfoButton
+            }}
+          </button>
+        </div>
+
+        <label class="checkbox-label automatic-follow-up-toggle">
+          <input
+            type="checkbox"
+            [checked]="request()!.automatic_follow_up"
+            [disabled]="togglingAutomaticFollowUp()"
+            (change)="toggleAutomaticFollowUp($any($event.target).checked)"
+          />
+          {{ t().requests.detail.automaticFollowUpLabel }}
+        </label>
+        <p class="muted automatic-follow-up-hint">{{ t().requests.detail.automaticFollowUpHint }}</p>
+
+        @if (request()!.follow_up_rounds.length > 0) {
+          <h4>{{ t().requests.detail.followUpRoundsHeading }}</h4>
+          <ul class="follow-up-rounds-list">
+            @for (round of request()!.follow_up_rounds; track round.id) {
+              <li>
+                <span>{{ t().requests.detail.roundLabel(round.round_number) }}</span>
+                <span class="muted">({{ roundTriggerLabel(round.trigger) }})</span>
+                <span class="muted">{{ t().requests.detail.roundFieldCount(round.requested_fields.length) }}</span>
+                <span class="muted">{{ round.created_at | date: 'short' }}</span>
+              </li>
+            }
+          </ul>
+        }
+
+        @if (request()!.recovery_stats; as recovery) {
+          @if (recovery.recovery_rate !== null) {
+            <h4>{{ t().requests.detail.recoveryHeading }}</h4>
+            <p class="muted">
+              {{ t().requests.detail.recoveryText(recovery.available_now, recovery.total_requested, recovery.recovery_rate) }}
+            </p>
+            @if (recovery.follow_up_recovered !== null && recovery.follow_up_recovered > 0) {
+              <p class="muted">{{ t().requests.detail.recoveryFollowUpText(recovery.follow_up_recovered) }}</p>
+            }
+          }
+        }
+      </div>
+    }
 
     <h2>{{ t().requests.detail.documentsHeading }}</h2>
     @if (request()!.documents.length === 0) {

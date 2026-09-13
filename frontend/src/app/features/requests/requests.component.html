@@ -34,9 +34,12 @@
               <td>{{ productSummary(request) }}</td>
               <td>{{ languageLabel(request) }}</td>
               <td>
-                <span class="status-badge {{ statusBadgeClass(request.status) }}">{{
-                  t().requestStatusLabels[request.status]
+                <span class="status-badge {{ statusBadgeClass(request) }}">{{
+                  t().requestStatusLabels[statusLabelKey(request)]
                 }}</span>
+                @if (fieldsFraction(request); as fraction) {
+                  <span class="muted fields-fraction">{{ fraction }}</span>
+                }
               </td>
               <td>{{ request.sent_at ? (request.sent_at | date: 'short') : t().requests.unknownValue }}</td>
               <td>{{ lastActivity(request) ? (lastActivity(request) | date: 'short') : t().requests.unknownValue }}</td>

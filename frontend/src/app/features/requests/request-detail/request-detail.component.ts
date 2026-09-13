@@ -8,8 +8,8 @@ import { LocaleService } from '../../../core/i18n/locale.service';
 import { BackendApiService } from '../../../core/services/backend-api.service';
 import {
   ComplianceRequest,
-  REQUEST_STATUS_BADGE_CLASSES,
-  RequestStatus
+  FieldInformationState,
+  effectiveRequestBadge
 } from '../../../core/services/compliance-request.models';
 import {
   ConfidenceLevel,
@@ -33,6 +33,22 @@ const CONFIDENCE_BADGE_CLASSES: Record<ConfidenceLevel, string> = {
   high: 'status-green',
   medium: 'status-orange',
   low: 'status-red'
+};
+
+const FIELD_INFORMATION_BADGE_CLASSES: Record<FieldInformationState, string> = {
+  available: 'status-green',
+  missing: 'status-orange',
+  review_required: 'status-red',
+  conflict: 'status-red',
+  not_applicable: 'status-orange'
+};
+
+const FOLLOW_UP_ERROR_KEYS: Record<string, string> = {
+  nothing_missing: 'followUpBlockedNothingMissing',
+  extraction_processing: 'followUpBlockedProcessing',
+  review_required: 'followUpBlockedReviewRequired',
+  duplicate_follow_up: 'followUpBlockedDuplicate',
+  not_eligible: 'followUpBlockedNotEligible'
 };
 
 @Component({
@@ -67,6 +83,11 @@ export class RequestDetailComponent implements OnInit {
   retryingDocumentId = signal<string | null>(null);
   reviewingFieldId = signal<string | null>(null);
   conflictByFieldId = signal<Record<string, ExtractedFieldConflict>>({});
+
+  requestingFollowUp = signal(false);
+  followUpMessage = signal<string | null>(null);
+  followUpError = signal<string | null>(null);
+  togglingAutomaticFollowUp = signal(false);
 
   private get requestId(): string {
     return this.route.snapshot.paramMap.get('requestId')!;
@@ -145,8 +166,58 @@ export class RequestDetailComponent implements OnInit {
     });
   }
 
-  statusBadgeClass(status: RequestStatus): string {
-    return REQUEST_STATUS_BADGE_CLASSES[status];
+  statusBadgeClass(request: ComplianceRequest): string {
+    return effectiveRequestBadge(request).badgeClass;
+  }
+
+  statusLabelKey(request: ComplianceRequest): string {
+    return effectiveRequestBadge(request).labelKey;
+  }
+
+  fieldInformationBadgeClass(state: FieldInformationState): string {
+    return FIELD_INFORMATION_BADGE_CLASSES[state];
+  }
+
+  requestMissingInfo(): void {
+    this.requestingFollowUp.set(true);
+    this.followUpError.set(null);
+    this.followUpMessage.set(null);
+    this.api.createFollowUp(this.requestId).subscribe({
+      next: (request) => {
+        this.request.set(request);
+        this.followUpMessage.set(this.t().requests.detail.followUpSentMessage);
+        this.requestingFollowUp.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        const code = err.error?.detail?.code as string | undefined;
+        const key = (code && FOLLOW_UP_ERROR_KEYS[code]) || 'actionError';
+        this.followUpError.set(
+          (this.t().requests.detail as Record<string, unknown>)[key] as string
+        );
+        this.requestingFollowUp.set(false);
+      }
+    });
+  }
+
+  toggleAutomaticFollowUp(enabled: boolean): void {
+    this.togglingAutomaticFollowUp.set(true);
+    this.actionError.set(null);
+    this.api.setAutomaticFollowUp(this.requestId, enabled).subscribe({
+      next: (request) => {
+        this.request.set(request);
+        this.togglingAutomaticFollowUp.set(false);
+      },
+      error: () => {
+        this.actionError.set(this.t().requests.detail.actionError);
+        this.togglingAutomaticFollowUp.set(false);
+      }
+    });
+  }
+
+  roundTriggerLabel(trigger: 'manual' | 'automatic'): string {
+    return trigger === 'manual'
+      ? this.t().requests.detail.roundTriggerManual
+      : this.t().requests.detail.roundTriggerAutomatic;
   }
 
   copyLink(): void {

@@ -6,8 +6,12 @@ from pydantic import BaseModel, Field
 from app.domain.enums import Locale
 from app.models.compliance_request import ComplianceRequest
 from app.models.extracted_field import ExtractedField
+from app.models.follow_up_round import FollowUpRound
 from app.models.supplier_document import SupplierDocument
+from app.schemas.follow_up import FollowUpRoundRead, RecoveryStatsRead, RequestInformationSummaryRead
 from app.schemas.supplier_document import SupplierDocumentRead
+from app.services.follow_up_service import RecoveryStats
+from app.services.missing_information_service import RequestInformationSummary
 
 
 class ComplianceRequestCreate(BaseModel):
@@ -39,6 +43,14 @@ class ComplianceRequestRead(BaseModel):
     has_active_link: bool
     products: list[ComplianceRequestProductRead]
     documents: list[SupplierDocumentRead]
+    # FASE 6 — see MissingInformationService/FollowUpService. Optional
+    # (default None/[]) because a handful of callers (e.g. the send/resend
+    # result, which already returns the request right after a state change
+    # unrelated to information completeness) don't need the extra queries.
+    automatic_follow_up: bool = False
+    information_status: RequestInformationSummaryRead | None = None
+    follow_up_rounds: list[FollowUpRoundRead] = Field(default_factory=list)
+    recovery_stats: RecoveryStatsRead | None = None
 
     @classmethod
     def from_model(
@@ -46,6 +58,9 @@ class ComplianceRequestRead(BaseModel):
         request: ComplianceRequest,
         documents: list[SupplierDocument] = (),
         extracted_fields_by_document: dict[uuid.UUID, list[ExtractedField]] = None,
+        information_summary: RequestInformationSummary | None = None,
+        follow_up_rounds: list[FollowUpRound] = (),
+        recovery_stats: RecoveryStats | None = None,
     ) -> "ComplianceRequestRead":
         extracted_fields_by_document = extracted_fields_by_document or {}
         return cls(
@@ -63,6 +78,7 @@ class ComplianceRequestRead(BaseModel):
             has_active_link=(
                 request.secure_token_hash is not None and request.token_revoked_at is None
             ),
+            automatic_follow_up=request.automatic_follow_up,
             products=[
                 ComplianceRequestProductRead(
                     product_id=rp.product_id,
@@ -77,6 +93,15 @@ class ComplianceRequestRead(BaseModel):
                 )
                 for document in documents
             ],
+            information_status=(
+                RequestInformationSummaryRead.from_summary(information_summary)
+                if information_summary is not None
+                else None
+            ),
+            follow_up_rounds=[FollowUpRoundRead.from_model(r) for r in follow_up_rounds],
+            recovery_stats=(
+                RecoveryStatsRead.from_stats(recovery_stats) if recovery_stats is not None else None
+            ),
         )
 
 

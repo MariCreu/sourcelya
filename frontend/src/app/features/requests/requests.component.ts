@@ -5,8 +5,7 @@ import { LocaleService } from '../../core/i18n/locale.service';
 import { BackendApiService } from '../../core/services/backend-api.service';
 import {
   ComplianceRequest,
-  REQUEST_STATUS_BADGE_CLASSES,
-  RequestStatus
+  effectiveRequestBadge
 } from '../../core/services/compliance-request.models';
 import { TopNavComponent } from '../../shared/top-nav/top-nav.component';
 
@@ -55,7 +54,17 @@ export class RequestsComponent implements OnInit {
     );
   }
 
-  statusBadgeClass(status: RequestStatus): string {
-    return REQUEST_STATUS_BADGE_CLASSES[status];
+  statusBadgeClass(request: ComplianceRequest): string {
+    return effectiveRequestBadge(request).badgeClass;
+  }
+
+  statusLabelKey(request: ComplianceRequest): string {
+    return effectiveRequestBadge(request).labelKey;
+  }
+
+  fieldsFraction(request: ComplianceRequest): string | null {
+    const info = request.information_status;
+    if (!info || info.total_requested === 0) return null;
+    return `${info.available_count}/${info.total_requested}`;
   }
 }

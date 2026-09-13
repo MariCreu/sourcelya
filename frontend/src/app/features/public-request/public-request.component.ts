@@ -55,9 +55,25 @@ export class PublicRequestComponent implements OnInit {
     () => DICTIONARIES[this.request()?.language ?? 'es'].publicRequest
   );
 
-  readonly isFinal = computed(() => {
-    const status = this.request()?.status;
-    return status === 'submitted' || status === 'completed';
+  // FASE 6: only COMPLETED is truly final — SUBMITTED-but-incomplete stays
+  // editable so the supplier can keep going without a company action
+  // being required first (a follow-up round just narrows *what's shown as
+  // needed*, via isFollowUpMode/isFieldEditable below).
+  readonly isFinal = computed(() => this.request()?.status === 'completed');
+
+  // True once the supplier has submitted at least once and something is
+  // still outstanding — drives the "ALMOST THERE" scoped view instead of
+  // the full first-time form.
+  readonly isFollowUpMode = computed(
+    () => this.request()?.submitted_at != null && !this.isFinal()
+  );
+
+  readonly missingFieldKeys = computed(() => {
+    const keys = new Set<string>();
+    for (const ref of this.request()?.missing_fields ?? []) {
+      keys.add(`${ref.packaging_component_id}:${ref.field_name}`);
+    }
+    return keys;
   });
 
   private get token(): string {
@@ -107,6 +123,18 @@ export class PublicRequestComponent implements OnInit {
       }
     }
     return values;
+  }
+
+  isFieldEditable(componentId: string, fieldName: string): boolean {
+    if (this.isFinal()) return false;
+    if (fieldName === 'notes') return true; // never a "requested" field — always safe to add/edit
+    if (!this.isFollowUpMode()) return true;
+    return this.missingFieldKeys().has(`${componentId}:${fieldName}`);
+  }
+
+  fieldLabel(fieldName: string): string {
+    const labels = this.pt().almostThereFieldLabels as Record<string, string>;
+    return labels[fieldName] ?? fieldName;
   }
 
   private classifyError(err: HttpErrorResponse): LoadError {

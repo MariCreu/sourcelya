@@ -11,13 +11,15 @@ marketing copy (tagline, one-line explanation) lives in one place —
 > Sourcelya helps you collect and organise supplier documentation. It does
 > not constitute legal advice and does not guarantee regulatory compliance.
 
-This repository currently implements **FASE 1–5** of the roadmap:
+This repository currently implements **FASE 1–6** of the roadmap:
 architecture, database schema, authentication, the Suppliers/Products
 catalog, the secure no-login-required supplier request flow, the supplier
-attaching real documents to that request, and now turning those documents
-into structured, evidence-backed proposals a human reviews before anything
-ever touches `PackagingComponent`. See [Roadmap](#roadmap) below for what's
-next.
+attaching real documents to that request, turning those documents into
+structured, evidence-backed proposals a human reviews before anything ever
+touches `PackagingComponent`, and now closing the loop end to end —
+Sourcelya works out exactly what's still missing and asks the supplier for
+only that, without anyone writing a follow-up email by hand. See
+[Roadmap](#roadmap) below for what's next.
 
 ## Product positioning
 
@@ -317,18 +319,32 @@ immediately redo the model. See `backend/app/models/`:
 - **`Supplier`**, **`Product`**, **`PackagingComponent`** — the FASE 2 catalog
   entities: full CRUD now exists on top of these (see
   [API endpoints](#api-endpoints) and [Roadmap](#roadmap)).
-- **`ComplianceRequest`**, **`ComplianceRequestProduct`** (FASE 3) — a
-  company's request to one supplier covering one or more of that supplier's
-  products. `status` is a linear `VARCHAR` state machine (`draft -> sent ->
-  opened -> in_progress -> submitted`; `review_required`/`completed` exist
-  as future states nothing transitions into yet), `language` is the
-  supplier-facing locale chosen explicitly per request (never inferred from
-  the supplier's country), and `secure_token_hash`/`token_expires_at`/
-  `token_revoked_at` implement the token design described above.
+- **`ComplianceRequest`**, **`ComplianceRequestProduct`** (FASE 3, extended
+  FASE 6) — a company's request to one supplier covering one or more of
+  that supplier's products. `status` is a `VARCHAR` state machine (`draft
+  -> sent -> opened -> in_progress -> submitted -> completed`, looping back
+  to `in_progress` on each follow-up round's edit — see [Document
+  extraction (FASE 5)](#document-extraction-fase-5)'s sibling section
+  [Missing-information follow-up
+  (FASE 6)](#missing-information-follow-up-fase-6) for the full state
+  machine and why the previously-unused `review_required` value was
+  removed), `language` is the supplier-facing locale chosen explicitly per
+  request (never inferred from the supplier's country), and
+  `secure_token_hash`/`token_expires_at`/`token_revoked_at` implement the
+  token design described above. FASE 6 added `automatic_follow_up` (bool,
+  default `False`) and `fields_available_after_first_submission` (int,
+  nullable — a one-time snapshot for the recovery-rate metric).
   `ComplianceRequestProduct` is a plain join row (`request_id`,
   `product_id`, unique together) — see [Public supplier
   portal](#public-supplier-portal) for why there is deliberately no
   separate "supplier answers" table.
+- **`FollowUpRound`** (FASE 6) — an immutable snapshot of one "we asked the
+  supplier for exactly these fields" event: `round_number`,
+  `requested_fields` (JSON `[{packaging_component_id, field_name}]`),
+  `trigger` (`manual`/`automatic`), `available_count_before`/
+  `missing_count_before`. Created the instant a follow-up email is sent —
+  see [Missing-information follow-up
+  (FASE 6)](#missing-information-follow-up-fase-6).
 - **`AuditEvent`** (FASE 3) — an append-only log
   (`REQUEST_CREATED`/`_SENT`/`_OPENED`/`_SAVED`/`_SUBMITTED`,
   `TOKEN_REVOKED`, `EMAIL_RESENT`) written by `AuditService.record()`.
@@ -402,6 +418,7 @@ ones:
 | `ALLOWED_UPLOAD_EXTENSIONS` | Accepted document extensions (default `pdf,xlsx,csv,docx,png,jpg,jpeg`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Required (with `SUPABASE_URL`) for real Supabase Storage; otherwise documents use the in-memory fallback |
 | `INTEGRATION_DATABASE_URL` | Optional override for `pytest -m integration`; defaults to the `docker-compose.yml` Postgres credentials |
+| `MAX_AUTOMATIC_FOLLOW_UP_ROUNDS` | Ceiling on **automatic** follow-up rounds per request before Sourcelya stops auto-sending and flags `REQUEST_NEEDS_HUMAN_ATTENTION` (default 3) — manual follow-up is never capped. See [Missing-information follow-up (FASE 6)](#missing-information-follow-up-fase-6) |
 
 If you don't have a Supabase project yet, set `SUPABASE_JWT_STRATEGY=hs256`
 and `SUPABASE_JWT_SECRET` to any value locally — the frontend won't be able
@@ -469,6 +486,8 @@ GET    /api/requests/{id}
 POST   /api/requests/{id}/send                                # mints the token, emails it, returns request_url once
 POST   /api/requests/{id}/revoke
 POST   /api/requests/{id}/resend                               # mints a NEW token — see note below
+POST   /api/requests/{id}/follow-up                            # manual: ask again for only what's still missing — 409 with a structured code if not eligible
+POST   /api/requests/{id}/automatic-follow-up                  # toggle the per-request automatic_follow_up flag (off by default)
 
 GET    /api/public/requests/{token}                            # no auth — the token IS the credential
 PATCH  /api/public/requests/{token}                            # save progress
@@ -484,6 +503,13 @@ POST   /api/documents/{document_id}/retry-extraction           # re-runs the pip
 
 POST   /api/internal/jobs/process-reminders                  # shared-secret, not user auth
 ```
+
+`POST /api/requests/{id}/follow-up` returns a structured `{"detail":
+{"code": ..., "detail": ...}}` body on 409 (`duplicate_follow_up`,
+`nothing_missing`, `review_required`, `not_eligible`,
+`max_rounds_reached`) instead of a bare string, the same pattern FASE 5's
+conflict error established — see [Missing-information follow-up
+(FASE 6)](#missing-information-follow-up-fase-6).
 
 Every `suppliers`/`products`/`requests`/`documents` route requires a
 Supabase-authenticated user with a company (`get_current_company`);
@@ -809,6 +835,256 @@ flow.py` runs the full lifecycle through the real HTTP API: upload → stub/
 fake extraction produces proposals → list them with evidence → accept one
 → confirm the `PackagingComponent` and computed status actually changed.
 
+### Missing-information follow-up (FASE 6)
+
+The FASE 3–5 loop stopped at "supplier clicked Submit." FASE 6 closes the
+real operational loop: company asks → supplier responds (partially) →
+Sourcelya extracts → company reviews → **Sourcelya figures out exactly
+what's still missing** → Sourcelya asks again for *only that* → supplier
+completes it → request reaches COMPLETE. Nothing here is AI-driven —
+extraction is still the only place an LLM is involved (unchanged from
+FASE 5); everything that decides what's missing, what's complete, what
+gets re-asked, and what an email says is deterministic code operating on
+structured data.
+
+**The one rule everything else here serves**: Sourcelya never asserts
+"PPWR compliant," "non-compliant," or "legally valid" — there is no legal
+rules engine in this MVP and building one is explicitly out of scope (see
+[Roadmap](#roadmap)). The only vocabulary Sourcelya uses is
+**information complete / information missing / review required /
+conflict** — a statement about data completeness, never a legal judgment.
+`InformationStatus` and `FieldInformationState`
+(`app/domain/enums.py`) are named accordingly.
+
+**What counts as "requested"**: FASE 6 does not invent a new concept for
+this — it reuses FASE 5's `ExtractableFieldName` enum (`material`,
+`packaging_type`, `weight_grams`, `recycled_content_percentage`,
+`packaging_reference`) as the canonical "fields a request expects back"
+per `PackagingComponent`. The same five fields are both "what extraction
+can find" and "what a request expects" — one enum, not two parallel ones
+that could drift apart.
+
+**`MissingInformationService`** (`app/services/missing_information_
+service.py`) — the deterministic engine the spec insisted on ("NO usar LLM
+para decidir si falta información"). For every requested field on every
+`PackagingComponent` covered by a request, it looks at exactly three
+structured inputs — the component's current column value, and any
+`ExtractedField` proposals for that field that are still `pending` — and
+classifies the field into one of:
+
+| State | Meaning |
+| --- | --- |
+| `AVAILABLE` | The component column already has a value, no pending proposal conflicts with it |
+| `MISSING` | No value, no pending proposal either |
+| `REVIEW_REQUIRED` | A pending proposal exists and there's no current value to compare it against (or it agrees) — a human still has to accept/reject it before it counts |
+| `CONFLICT` | A pending proposal's value **differs** from an existing current value — blocks completion until a human resolves it via `accept(conflict_resolution=...)` (see [Document extraction](#document-extraction-fase-5)) |
+| `NOT_APPLICABLE` | Reserved for a future per-request "this field doesn't apply to this component" flag — never produced today (see [Technical debt](#technical-debt--simplifications)) |
+
+`summarize()` rolls these per-field states up into one
+`InformationStatus` for the whole request: `complete` (all fields
+`AVAILABLE`/`NOT_APPLICABLE`), `conflict` (any `CONFLICT`, wins over
+everything else), `review_required` (any pending review, no conflict), or
+`missing_information` otherwise. This is a pure function over data already
+in Postgres — no new tables, no caching, same "computed status, not
+cached" philosophy as [`StatusCalculationService`](#computed-status-not-cached).
+
+**Request state machine, extended**: `RequestStatus` grew from the FASE 3
+one-way `draft -> sent -> opened -> in_progress -> submitted -> completed`
+into a machine that can **loop**: `submitted` can go back to
+`in_progress` when a follow-up round is created, and only reaches
+`completed` when `MissingInformationService.summarize()` says `complete`
+— not merely when the supplier clicks Submit. The unused `review_required`
+status value from FASE 3 was removed rather than repurposed, since FASE 6
+needed that concept to live at the *information* level
+(`InformationStatus`), not the request-workflow level — conflating the
+two would have meant a component's field-level state directly renaming
+the request's own workflow stage, which stops making sense once a request
+can have some fields under review and others already complete. This is
+deliberately a **smaller** state machine than the spec's own example list
+(`DRAFT/SENT/SUPPLIER_RESPONDED/PROCESSING/REVIEW_REQUIRED/
+MISSING_INFORMATION/FOLLOW_UP_SENT/COMPLETE/REVOKED`) — most of those are
+already expressible as `RequestStatus` × `InformationStatus` combinations
+(e.g. "FOLLOW_UP_SENT" is just `in_progress` + a `FollowUpRound` row;
+"REVIEW_REQUIRED" is `submitted` + `InformationStatus.review_required`),
+so adding them as first-class statuses would have meant tracking the same
+fact twice.
+
+**Supplier submission no longer means "done"**
+(`PublicRequestService.submit()`): submitting now runs
+`FollowUpService.reevaluate()` — process what was uploaded, recompute
+`MissingInformationService`, and only transition to `completed` if the
+result is actually `complete`; otherwise the request stays
+`submitted`/`in_progress` and the company sees exactly what's still
+outstanding. The supplier-facing confirmation copy was changed to "Thanks,
+your information has been submitted" — never "everything is complete" —
+since FASE 6 made completeness a fact Sourcelya computes independently,
+not one the supplier's own action can assert.
+
+**`FollowUpService`** (`app/services/follow_up_service.py`) is the
+orchestrator with two entry points:
+
+- `create_round(trigger="manual"|"automatic")` — the company clicks
+  **"Request missing information"** (`POST /api/requests/{id}/follow-up`),
+  or the automatic path triggers it. Before creating anything it asserts
+  the request is eligible — not revoked, not already complete, extraction
+  not still `processing`, no live conflict, no pending review affecting a
+  requested field, at least one field actually missing, and (for
+  `automatic` only) under `MAX_AUTOMATIC_FOLLOW_UP_ROUNDS` — raising a
+  specific exception per violation (`DuplicateFollowUpError`,
+  `NothingMissingError`, `ReviewRequiredError`,
+  `RequestNotEligibleForFollowUpError`, `MaxAutomaticRoundsReachedError`),
+  each mapped to a distinct HTTP 409 `code` (see [API
+  endpoints](#api-endpoints)) so the frontend renders exact guidance
+  instead of a generic error. On success it snapshots exactly the still-
+  missing fields into one immutable `FollowUpRound` row, mints a fresh
+  token (see below), and sends the missing-information email.
+- `reevaluate()` — called after every event that could change
+  completeness (supplier submit, a field accepted, a field rejected). It
+  recomputes `MissingInformationService`, transitions the request to
+  `completed` if warranted (recording `REQUEST_COMPLETED` and, when
+  `automatic_follow_up` is enabled on the request, sending the optional
+  thank-you email), or — if still incomplete **and** automatic follow-up
+  is on **and** the missing fields are unambiguous (no pending review, no
+  conflict) — calls `create_round(trigger="automatic")` itself. A request
+  with **zero** requested fields (a request whose product has no
+  `PackagingComponent`s yet) is guarded out explicitly: without the guard,
+  `total_requested == 0` is vacuously "complete," which would silently
+  auto-complete and email a "thank you, all done!" for a request that
+  never tracked anything.
+
+**Follow-up rounds are minimal, on purpose**: a `FollowUpRound` is one
+immutable snapshot row (`round_number`, `requested_fields` JSON,
+`trigger`, `available_count_before`/`missing_count_before`) — not a
+thread, not a chat, not a mutable checklist. "What's still missing right
+now" is never read from round history; it's always recomputed live by
+`MissingInformationService`. Rounds exist purely as an auditable record of
+*when* and *for what* Sourcelya asked again — exactly the "minimal round
+modeling" the spec asked for.
+
+**Token security — kept, not weakened**: every follow-up (and every
+reminder) mints a brand-new raw token and stores only its hash
+(`hash_token()`, unchanged from FASE 3), immediately revoking the
+previous one implicitly (its hash no longer matches anything, so the old
+link now reads as an unknown/invalid token — verified directly in
+`test_e2e_follow_up_flow.py`). This isn't a new design decision so much as
+a **forced consequence of an already-made one**: FASE 3 chose a one-way
+hash (never storing the raw token, so it can't be re-sent or looked up
+later) specifically so a leaked database dump can't be used to impersonate
+a supplier — but that same property means Sourcelya itself cannot recover
+the previous raw token to reuse it. Token rotation-per-round was never
+actually a choice between "keep" and "rotate" (option A vs B from the
+spec) — once the hash-only, non-reversible design was accepted for FASE 3,
+rotation on every new email was already the only option consistent with
+it. The alternative (persisting the raw token so it *could* be reused)
+would have reintroduced exactly the risk FASE 3 was built to avoid, just
+to save minting one token. Expiry and manual revocation
+(`POST /api/requests/{id}/revoke`) both still work exactly as before.
+
+**Automatic follow-up — manual first, opt-in, capped**
+(`ComplianceRequest.automatic_follow_up`, default `False`): FASE 6
+implements the spec's "MANUAL as the safe path first," and stops there for
+default behavior — the company must explicitly turn a per-request switch
+on (`POST /api/requests/{id}/automatic-follow-up`) before Sourcelya will
+ever auto-send a follow-up on its own. This is a deliberate control
+decision, not a missing feature: the company should keep control during
+validation of a new tenant/supplier relationship, and only opt in once
+they trust the extraction + missing-information logic for that request.
+When enabled, `reevaluate()` is the only trigger — there is **no new
+scheduler**; automatic follow-up rides the same request-response cycle
+that already exists (submit/accept/reject), consistent with this
+codebase's "no in-process scheduler, no Celery/Redis" stance (see [Why
+not an in-process scheduler](#why-not-an-in-process-scheduler-for-jobs)).
+`MAX_AUTOMATIC_FOLLOW_UP_ROUNDS` (default 3) stops an automatic loop from
+ever running forever: once hit, Sourcelya records
+`REQUEST_NEEDS_HUMAN_ATTENTION` and stops auto-sending — manual follow-up
+remains available, uncapped, at any time.
+
+**Never pester the supplier** — the concrete rules
+`_assert_can_follow_up()` enforces before any follow-up (manual or
+automatic) is created: nothing is actually missing, extraction is still
+`processing`, a relevant `REVIEW_REQUIRED` exists, a relevant `CONFLICT`
+exists, the request is `revoked`, the request is already `completed`, or
+an identical follow-up (same missing fields) was already just sent
+(`DuplicateFollowUpError`) — all enforced in
+`test_follow_up_service.py`.
+
+**Follow-up vs. reminder — two different concepts, not merged**: a
+**follow-up** is new content — "here's specifically what's still
+missing" — and always creates a `FollowUpRound`. A **reminder** is a
+re-delivery of content that hasn't changed — "you haven't responded yet"
+— and creates no new round; it just re-mints a token (same rotation logic
+above) and resends whatever the request's *current* state already implies
+(the original request, or the current outstanding follow-up, whichever is
+live). `ReminderService` (`app/services/reminder_service.py`, rewritten in
+FASE 6) reuses the exact job/scheduling mechanism from FASE 3 —
+`REMINDER_SCHEDULE_DAYS`, `reminder_count`/`last_reminder_at`, the same
+`POST /api/internal/jobs/process-reminders` shared-secret endpoint, and
+the same idempotent `UPDATE ... WHERE reminder_count = :i` claim-before-
+send guard — no new scheduler was introduced for FASE 6.
+
+**Company review UI — Information Status**: the request detail view shows
+a live "N/M requested fields available" summary plus four lists —
+available (✓), missing (○), review required (⚠, linking to the pending
+extracted-field proposal), conflict (⚠, showing both the current and the
+proposed value side by side) — computed from the same
+`MissingInformationService` output the backend uses, never a separate
+frontend calculation. The **"Request missing information"** button is
+disabled (with the specific reason shown) whenever `_assert_can_follow_up`
+would reject it, so the company never sees a click succeed only to get a
+409 back.
+
+**Supplier portal — "Almost there," not "start over"**: opening a
+follow-up link shows only the fields still missing for that round
+(`missing_fields` on the public request read schema) — previously-
+supplied fields render as completed/read-only, and previously-uploaded
+documents are never re-requested. This reuses the same public-request
+form components from FASE 3/4, just scoped to the round's
+`requested_fields` rather than showing the full form from scratch.
+
+**Emails — deterministic copy, two languages, no template engine**
+(`app/integrations/email/templates.py`, `EmailService`): FASE 6 added two
+builders — the missing-information follow-up (lists only the fields still
+needed, with copy explicitly saying "you don't need to resend the
+information you've already provided") and an optional request-complete
+thank-you, both in `es`/`en` selected from the request's own `language`
+column (never inferred). Same `ConsoleEmailSender`-locally /
+configurable-`RESEND_API_KEY`-in-production setup as FASE 3 — no generic
+templating system was introduced, and no LLM writes any email copy.
+
+**Recovery-rate metric** (`FollowUpService.recovery_stats()`) — the ROI
+number the spec wants demonstrable later: `total_requested`,
+`available_now`, `available_after_first_submission` (a **one-time
+snapshot** taken the instant the supplier's first-ever submission is
+processed — never overwritten again), `follow_up_recovered` (the
+difference), and `recovery_rate` (`available_now / total_requested`).
+Deliberately avoids building an event-sourcing/history system to compute
+this: one persisted snapshot column
+(`fields_available_after_first_submission`) plus the always-live
+`MissingInformationService` output is enough to answer "how much did
+follow-up recover that the first response didn't" without a general
+timeline feature.
+
+**Audit trail additions**: `SUPPLIER_RESUBMITTED`, `FOLLOW_UP_CREATED`,
+`REQUEST_COMPLETED`, `REQUEST_NEEDS_HUMAN_ATTENTION` were added to
+`AuditEventType` alongside the FASE 3/5 events already recorded
+(`REQUEST_SENT`, `REQUEST_SUBMITTED`, `EMAIL_RESENT`, etc.) — no new
+generic event bus, just a few more values on the existing append-only log.
+
+**Tests**: `test_missing_information_service.py` (6) — every field state
+in isolation (available, missing, review-required, conflict, an accepted
+proposal becomes available, a rejected one stays missing).
+`test_follow_up_service.py` (8) — a follow-up contains only missing
+fields and never re-asks an available one, duplicate follow-ups are
+blocked, a conflict/pending-review blocks both follow-up and completion,
+an incomplete submit never marks `completed`, a fully-supplied submit
+does, automatic follow-up is off by default, and the round cap is
+respected. `test_reminder_service.py` (4) covers the reminder/follow-up
+distinction and the idempotent claim guard.
+`test_e2e_follow_up_flow.py` (2) runs the full loop through the real HTTP
+API end to end — see [Manual flow](#manual-flow-verified-end-to-end) —
+plus the conflict-blocks-completion scenario, and asserts the audit trail
+and recovery metric both come out right at the end.
+
 ### Frontend
 
 ```bash
@@ -888,6 +1164,18 @@ public supplier link:
   company isolation, and the full extraction-to-accepted-value lifecycle
   (see [Document extraction (FASE 5)](#document-extraction-fase-5)) —
   fixtures only, never a paid call to the real Claude API.
+- `test_missing_information_service.py` / `test_follow_up_service.py` /
+  `test_reminder_service.py` / `test_e2e_follow_up_flow.py` — the
+  missing-information loop: every field state (available/missing/review-
+  required/conflict), a follow-up containing only missing fields and never
+  re-asking an available one, duplicate follow-ups blocked, a conflict or
+  pending review blocking both follow-up and completion, an incomplete
+  submit never marking `completed` while a fully-supplied one does,
+  company/public-token isolation, ES/EN email content, automatic
+  follow-up disabled by default and capped at
+  `MAX_AUTOMATIC_FOLLOW_UP_ROUNDS`, the reminder/follow-up distinction,
+  the audit trail, and the recovery-rate metric (see
+  [Missing-information follow-up (FASE 6)](#missing-information-follow-up-fase-6)).
 
 ### Integration suite (real PostgreSQL)
 
@@ -1041,6 +1329,43 @@ against fixtures in the automated suite, see [Document extraction
    there, still in their accepted/rejected state** — a retry never re-asks
    a question a human already answered, and never loses the original file.
 
+**FASE 6**, same real-backend/real-Postgres/real-Chromium technique — a
+bare packaging component (only `packaging_type` set at creation, so
+1/5 fields start available, 4 missing) taken all the way to `COMPLETE`
+through two rounds:
+
+1. Company sends the request; detail page shows `1/5 campos disponibles`.
+2. Supplier fills in `material` and `weight_grams` directly, uploads a
+   spec document (which the fake extraction path proposes
+   `packaging_reference` from), and submits. Confirmation copy reads
+   "Gracias, tu información ha sido enviada" — not "todo completo."
+3. Company reloads the request detail: Information Status now shows
+   `3/5` available, `weight_grams`/`material`/`packaging_type` under
+   Disponible, `packaging_reference` under Revisión requerida (linking to
+   the pending proposal), `recycled_content_percentage` under Falta.
+4. Company accepts the `packaging_reference` proposal (no conflict, since
+   the component had no prior value there) → detail page updates to
+   `4/5`, only `recycled_content_percentage` still missing.
+5. Company clicks "Solicitar información faltante" → a `FollowUpRound`
+   is created and its email sent; the button becomes disabled (nothing
+   left ambiguous, but nothing new to ask either) until something changes.
+6. Supplier opens the follow-up's link (a **freshly minted token** — the
+   original link, opened again, now reads as invalid, confirming rotation
+   actually happened) and sees the "Casi listo" scoped view: only
+   `recycled_content_percentage` is editable, every other field renders
+   already filled in, read-only. They fill it in and submit.
+7. Company reloads the request: status is `Completada`, Information
+   Status shows `5/5`, and the Recovery panel reads
+   `Recuperación: 100% (2 campos recuperados tras seguimiento)` —
+   matching `recovery_stats.available_after_first_submission = 3` and
+   `follow_up_recovered = 2` exactly.
+8. Toggling "Seguimiento automático" on the request flips
+   `automatic_follow_up` (verified via the API response, since a
+   completed request has nothing left to auto-send).
+9. Switching to `EN` translates the whole Information Status panel,
+   round history, and recovery copy live, same pattern as every earlier
+   phase.
+
 ## Technical debt & simplifications
 
 Decisions made during FASE 3 to keep the scope to "close the request loop,
@@ -1152,6 +1477,48 @@ FASE 5:
   the automated suite, and was instead verified manually — see [Manual
   flow](#manual-flow-verified-end-to-end).
 
+FASE 6:
+
+- **No "required documents" concept.** Completeness is defined purely in
+  terms of the five `ExtractableFieldName` fields being
+  `AVAILABLE`/`NOT_APPLICABLE` — a request can reach `COMPLETE` with zero
+  documents ever uploaded, if every field was filled in directly. The
+  spec's "required documents (if any) present" clause has nothing to hook
+  into yet, since there is no per-request "this document type is
+  mandatory" flag in the data model.
+- **`NOT_APPLICABLE` is reserved, never produced.** `FieldInformationState`
+  includes it for a future per-request "this field doesn't apply to this
+  component" flag, but nothing in FASE 6 sets it — every field is either
+  requested-and-trackable or not requested at all.
+- **Single-component auto-link heuristic, inherited from FASE 5, still
+  applies to follow-up.** A request covering several `PackagingComponent`s
+  still needs the reviewer to pick the target component explicitly when
+  accepting a proposal; `MissingInformationService` itself handles
+  multi-component requests correctly (it evaluates every component), only
+  the *accept* UI has the FASE 5 limitation.
+- **No per-round token audit beyond the `FollowUpRound` row itself.**
+  Sourcelya doesn't log "token X was minted at time Y for round Z"
+  separately — the round's `created_at` plus the fact that the previous
+  token's hash no longer resolves is the evidence trail, consistent with
+  not building a general security-event log for this phase.
+- **Reminder and follow-up email content overlap on purpose.** A reminder
+  for a request currently `in_progress` after a follow-up resends
+  essentially the same missing-fields list a follow-up email would — there
+  is no separate "reminder about a follow-up" template; `ReminderService`
+  reads current state and reuses the follow-up template builder rather
+  than maintaining a third copy deck.
+- **No dashboard beyond the Requests list/detail.** Recovery-rate,
+  round counts, and information status are all viewable per request; there
+  is no cross-request analytics view aggregating recovery rate across a
+  company's whole request history — deliberately deferred, per the spec's
+  explicit exclusion of a new analytics dashboard.
+- **Automatic follow-up has no company-wide default.** The flag lives on
+  `ComplianceRequest`, not `Company` — turning it on for one request
+  doesn't turn it on for future ones. This matches the spec's "company
+  must keep control during validation" intent literally (opt in per
+  request) rather than assuming a company that likes automatic follow-up
+  once wants it for everything.
+
 ### Pre-production checklist
 
 Explicit, so it never quietly falls off a future phase's radar:
@@ -1186,9 +1553,14 @@ part of `0001_initial_schema.py`). `0002_compliance_requests.py` (FASE 3)
 adds `compliance_requests`, `compliance_request_products`, and
 `audit_events`. `0003_supplier_documents.py` (FASE 4) adds
 `supplier_documents`. `0004_extraction.py` (FASE 5) adds the extraction
-bookkeeping columns to `supplier_documents` and creates `extracted_fields`
-— all applied and verified against a real local PostgreSQL 16 instance, not
-just SQLite.
+bookkeeping columns to `supplier_documents` and creates `extracted_fields`.
+`0005_follow_up.py` (FASE 6) adds `automatic_follow_up` and
+`fields_available_after_first_submission` to `compliance_requests`,
+removes the unused `review_required` value's implicit meaning (the column
+stays `VARCHAR`, no data migration needed — see [PostgreSQL
+enums](#postgresql-enums)), and creates `follow_up_rounds` — all applied
+and verified against a real local PostgreSQL 16 instance, not just
+SQLite.
 
 ## Project structure
 
@@ -1204,14 +1576,20 @@ backend/            # api.sourcelya.com
   app/
     api/            # FastAPI routers + dependencies (auth, DB session)
     core/           # config, database, security (JWT), logging
-    models/         # SQLAlchemy models (extracted_field.py: FASE 5 proposals)
+    models/         # SQLAlchemy models (extracted_field.py: FASE 5 proposals;
+                     # follow_up_round.py: FASE 6 round snapshots)
     domain/         # pure-Python domain enums (not DB-mapped) — includes
-                     # Locale (es/en), reserved for ComplianceRequest.language
-    schemas/        # Pydantic schemas
+                     # Locale (es/en); FieldInformationState/InformationStatus
+                     # (FASE 6, computed-only, never DB columns)
+    schemas/        # Pydantic schemas (follow_up.py: FASE 6 read schemas)
     repositories/   # DB access, company-scoped by default
     services/       # business logic (DocumentService: upload validation;
                      # ExtractionService: FASE 5 pipeline orchestration;
-                     # ExtractedFieldService: the only accept/reject writer)
+                     # ExtractedFieldService: the only accept/reject writer;
+                     # MissingInformationService: FASE 6 deterministic
+                     # completeness engine; FollowUpService: FASE 6 round
+                     # creation + reevaluate(); ReminderService: real
+                     # implementation as of FASE 6)
     integrations/   # email / storage / extraction adapters behind interfaces
                      # (storage/: SupabaseStorageService + InMemoryStorageService;
                      # extraction/: StubDocumentExtractionService +
@@ -1282,13 +1660,45 @@ suite](#integration-suite-real-postgresql) and the `Locale` enum.
   deliberately kept simple or deferred. *(Note: an earlier sketch of this
   roadmap numbered the real dashboard/reminders/extraction work
   differently — this section reflects how the phases actually shipped.)*
-- **FASE 6**: Resend email templates + real `ReminderService` logic behind
-  the `POST /internal/jobs/process-reminders` shape already in place.
-- **FASE 7**: Polish, broader test coverage, deployment readiness — closing
-  the items on the [pre-production checklist](#pre-production-checklist).
+- **FASE 6 — done**: closes Sourcelya's main operational loop — company
+  asks → supplier responds (partially) → Sourcelya extracts → company
+  reviews → `MissingInformationService` determines exactly what's still
+  missing → the company (or, once opted in per request, Sourcelya itself)
+  asks again for only that → supplier completes it → request reaches
+  `COMPLETE`. New: `FollowUpRound`, the extended request state machine,
+  a real `ReminderService` (reusing the existing internal-jobs shape,
+  no new scheduler), ES/EN follow-up and thank-you emails, the
+  Information Status UI, and a computable information-recovery-rate
+  metric — see [Missing-information follow-up
+  (FASE 6)](#missing-information-follow-up-fase-6) for the full design,
+  the token-rotation decision, the automatic-follow-up safeguards, and
+  tests, and [Technical debt &
+  simplifications](#technical-debt--simplifications) for what was
+  deliberately kept simple. Verified against the real backend, real
+  Postgres, and a real Chromium browser end to end (see [Manual
+  flow](#manual-flow-verified-end-to-end)) — the exact scenario "asked a
+  supplier for 5 fields, they returned 3, Sourcelya automatically
+  identified the other 2 were still missing, asked again for exactly
+  those, and the request completed" runs and passes.
 
-Explicitly out of scope for the MVP (see the product brief): Digital Product
-Passport, EUDR, full REACH, a supplier marketplace/network, ERP or
-Shopify/WooCommerce/Amazon integrations, multi-company-per-user, complex
-billing, translations, blockchain. The data model doesn't block adding these
-later, but none of them are being built now.
+**Development is paused here by design.** FASE 6 was the last phase this
+roadmap commits to; whether to proceed to further feature work or to
+freeze the product as-is for a commercial demo/validation is a decision
+to make with real usage feedback in hand, not one to pre-bake into the
+roadmap. A tentative **FASE 7** (polish, broader test coverage, closing
+the [pre-production checklist](#pre-production-checklist) — most notably
+malware scanning) remains the natural next step *if* development
+continues, but is not started.
+
+Explicitly out of scope for the MVP (see the product brief): a PPWR/legal
+rules engine or automated compliance scoring (see [Missing-information
+follow-up (FASE 6)](#missing-information-follow-up-fase-6) for why
+Sourcelya only ever reports information completeness, never legal
+validity), Digital Product Passport, EUDR, full REACH, a supplier
+marketplace/network, ERP or Shopify/WooCommerce/Amazon integrations,
+multi-company-per-user, complex billing/Stripe/subscription plans,
+enterprise RBAC, a chatbot/RAG/vector-DB/embeddings layer, any AI usage
+beyond FASE 5's document extraction, an analytics dashboard, a generic
+workflow builder, a generic notification system, and blockchain. The data
+model doesn't block adding these later, but none of them are being built
+now.

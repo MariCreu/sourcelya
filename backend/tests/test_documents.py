@@ -87,17 +87,20 @@ def test_delete_document_before_submit(client, auth_header):
     assert company_view["documents"] == []
 
 
-def test_upload_rejected_after_submit(client, auth_header):
+def test_upload_still_allowed_after_submit(client, auth_header):
+    """FASE 6: SUBMITTED no longer blocks uploads — a supplier may attach
+    more documents during a follow-up round. Only a COMPLETED request
+    (see test_upload_rejected_once_complete) rejects new uploads."""
     headers = auth_header(user_id=USER_A)
     _onboard(client, headers)
     _request, token = _send_full_request(client, headers)
     client.post(f"/api/public/requests/{token}/submit")
 
     response = _upload(client, token)
-    assert response.status_code == 409
+    assert response.status_code == 200
 
 
-def test_delete_rejected_after_submit(client, auth_header):
+def test_delete_still_allowed_after_submit(client, auth_header):
     headers = auth_header(user_id=USER_A)
     _onboard(client, headers)
     _request, token = _send_full_request(client, headers)
@@ -107,6 +110,38 @@ def test_delete_rejected_after_submit(client, auth_header):
     client.post(f"/api/public/requests/{token}/submit")
 
     response = client.delete(f"/api/public/requests/{token}/documents/{document_id}")
+    assert response.status_code == 200
+
+
+def test_upload_rejected_once_complete(client, auth_header):
+    headers = auth_header(user_id=USER_A)
+    _onboard(client, headers)
+    supplier = _create_supplier(client, headers)
+    product = _create_product(client, headers, supplier["id"])
+    client.post(
+        f"/api/products/{product['id']}/packaging-components",
+        json={
+            "name": "Outer box",
+            "packaging_type": "box",
+            "material": "Cardboard",
+            "weight_grams": 42,
+            "recycled_content_percentage": 10,
+            "packaging_reference": "REF-1",
+        },
+        headers=headers,
+    )
+    request = client.post(
+        "/api/requests",
+        json={"supplier_id": supplier["id"], "product_ids": [product["id"]], "language": "es"},
+        headers=headers,
+    ).json()
+    sent = client.post(f"/api/requests/{request['id']}/send", headers=headers).json()
+    token = sent["request_url"].rsplit("/", 1)[-1]
+
+    submitted = client.post(f"/api/public/requests/{token}/submit")
+    assert submitted.json()["status"] == "completed"
+
+    response = _upload(client, token)
     assert response.status_code == 409
 
 

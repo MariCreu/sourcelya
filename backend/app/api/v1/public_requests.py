@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_extraction_service, get_storage_service
+from app.api.deps import get_db, get_email_service, get_extraction_service, get_storage_service
 from app.integrations.extraction.base import DocumentExtractionService
 from app.integrations.storage.base import StorageService
 from app.repositories.company_repository import CompanyRepository
@@ -17,7 +17,10 @@ from app.services.document_service import (
     UnsupportedFileTypeError,
     UploadedFilePayload,
 )
+from app.services.email_service import EmailService
 from app.services.extraction_service import ExtractionService
+from app.services.follow_up_service import FollowUpService
+from app.services.missing_information_service import MissingInformationService
 from app.services.public_request_service import (
     ComponentNotInRequestError,
     InvalidTokenError,
@@ -33,7 +36,10 @@ router = APIRouter(prefix="/public/requests", tags=["public-requests"])
 def _to_public_read(db: Session, request) -> PublicComplianceRequestRead:
     company = CompanyRepository(db).get_by_id(request.company_id)
     documents = SupplierDocumentRepository(db).list_for_request(request.id)
-    return PublicComplianceRequestRead.from_model(request, company.name, documents)
+    information_summary = MissingInformationService(db).summarize(request.company_id, request)
+    return PublicComplianceRequestRead.from_model(
+        request, company.name, documents, information_summary
+    )
 
 
 def _token_error_response(exc: Exception) -> HTTPException:
@@ -77,11 +83,25 @@ def save_public_request(
 
 
 @router.post("/{token}/submit", response_model=PublicComplianceRequestRead)
-def submit_public_request(token: str, db: Session = Depends(get_db)) -> PublicComplianceRequestRead:
+def submit_public_request(
+    token: str,
+    db: Session = Depends(get_db),
+    email_service: EmailService = Depends(get_email_service),
+) -> PublicComplianceRequestRead:
     try:
         request = PublicRequestService(db).submit(token)
     except (InvalidTokenError, TokenExpiredError, TokenRevokedError) as exc:
         raise _token_error_response(exc) from exc
+
+    # Submitting never decides completeness by itself — see
+    # PublicRequestService.submit's docstring. FollowUpService.reevaluate()
+    # is what may flip the request to COMPLETED (+ thank-you email) or,
+    # only if this request opted into automatic_follow_up, send the next
+    # follow-up round automatically. Needs the Company/EmailService context
+    # PublicRequestService deliberately doesn't have (it only knows a
+    # token), so this happens here, not inside the service.
+    company = CompanyRepository(db).get_by_id(request.company_id)
+    FollowUpService(db, email_service).reevaluate(company, None, request)
     return _to_public_read(db, request)
 
 

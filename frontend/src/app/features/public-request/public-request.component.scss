@@ -62,6 +62,21 @@
   }
 }
 
+.almost-there-card {
+  border-color: var(--color-orange-text);
+  background: var(--color-orange-bg);
+  color: var(--color-orange-text);
+
+  h2 {
+    margin-top: 0;
+  }
+}
+
+.missing-fields-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
 .product-card {
   h3 {
     margin: 0 0 12px;

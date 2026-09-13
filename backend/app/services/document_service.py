@@ -104,8 +104,12 @@ class DocumentService:
     def upload_for_request(
         self, request: ComplianceRequest, upload: UploadedFilePayload
     ) -> SupplierDocument:
-        if request.status in (RequestStatus.SUBMITTED.value, RequestStatus.COMPLETED.value):
-            raise RequestNotEditableError("This request has already been submitted")
+        # FASE 6: SUBMITTED no longer blocks new uploads — a supplier may
+        # attach more documents during a follow-up round (see
+        # PublicRequestService's updated docstring/RequestStatus). Only
+        # COMPLETED is truly terminal.
+        if request.status == RequestStatus.COMPLETED.value:
+            raise RequestNotEditableError("This request has already been completed")
 
         canonical_content_type = self._validate(upload)
         extension = _extension_of(upload.filename)
@@ -137,8 +141,8 @@ class DocumentService:
         return document
 
     def delete_for_request(self, request: ComplianceRequest, document_id: uuid.UUID) -> None:
-        if request.status in (RequestStatus.SUBMITTED.value, RequestStatus.COMPLETED.value):
-            raise RequestNotEditableError("This request has already been submitted")
+        if request.status == RequestStatus.COMPLETED.value:
+            raise RequestNotEditableError("This request has already been completed")
 
         document = self.repository.get_for_request(request.id, document_id)
         if document is None:

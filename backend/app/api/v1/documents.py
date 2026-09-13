@@ -7,6 +7,7 @@ from app.api.deps import (
     get_current_company,
     get_current_user,
     get_db,
+    get_email_service,
     get_extraction_service,
     get_storage_service,
 )
@@ -14,11 +15,13 @@ from app.integrations.extraction.base import DocumentExtractionService
 from app.integrations.storage.base import StorageService
 from app.models.company import Company
 from app.models.user import User
+from app.repositories.compliance_request_repository import ComplianceRequestRepository
 from app.repositories.extracted_field_repository import ExtractedFieldRepository
 from app.repositories.supplier_document_repository import SupplierDocumentRepository
 from app.schemas.extracted_field import AcceptExtractedFieldPayload, ExtractedFieldConflict, ExtractedFieldRead
 from app.schemas.supplier_document import SupplierDocumentRead
 from app.services.document_service import DocumentService
+from app.services.email_service import EmailService
 from app.services.extracted_field_service import (
     ComponentNotInRequestError,
     ComponentNotSpecifiedError,
@@ -29,6 +32,7 @@ from app.services.extracted_field_service import (
     InvalidExtractedValueError,
 )
 from app.services.extraction_service import ExtractionService
+from app.services.follow_up_service import FollowUpService
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -82,6 +86,7 @@ def accept_extracted_field(
     company: Company = Depends(get_current_company),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ExtractedFieldRead:
     service = ExtractedFieldService(db)
     try:
@@ -109,7 +114,24 @@ def accept_extracted_field(
         ) from exc
     if field.document_id != document_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Field not found")
+
+    _reevaluate_after_review(db, email_service, company, field.request_id, user.id)
     return ExtractedFieldRead.from_model(field)
+
+
+def _reevaluate_after_review(
+    db: Session,
+    email_service: EmailService,
+    company: Company,
+    request_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+) -> None:
+    """Accepting/rejecting a field is the other moment (besides supplier
+    submit) that can make a request COMPLETE, or clear the way for an
+    automatic follow-up — see FollowUpService.reevaluate's docstring."""
+    request = ComplianceRequestRepository(db).get(company.id, request_id)
+    if request is not None:
+        FollowUpService(db, email_service).reevaluate(company, actor_user_id, request)
 
 
 @router.post(
@@ -121,6 +143,7 @@ def reject_extracted_field(
     company: Company = Depends(get_current_company),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    email_service: EmailService = Depends(get_email_service),
 ) -> ExtractedFieldRead:
     try:
         field = ExtractedFieldService(db).reject(company.id, user.id, field_id)
@@ -130,6 +153,8 @@ def reject_extracted_field(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if field.document_id != document_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Field not found")
+
+    _reevaluate_after_review(db, email_service, company, field.request_id, user.id)
     return ExtractedFieldRead.from_model(field)
 
 

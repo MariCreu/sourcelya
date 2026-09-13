@@ -92,16 +92,32 @@ def test_upload_rejects_file_over_size_limit(db, draft_request):
         _service(db).upload_for_request(draft_request, upload)
 
 
-def test_upload_rejected_once_request_is_submitted(db, draft_request):
+def test_upload_still_allowed_once_request_is_submitted(db, draft_request):
+    """FASE 6: SUBMITTED no longer blocks uploads — a supplier may attach
+    more documents during a follow-up round. Only COMPLETED is terminal."""
     draft_request.status = RequestStatus.SUBMITTED.value
+    upload = UploadedFilePayload(filename="spec.pdf", content_type="application/pdf", content=b"x")
+    document = _service(db).upload_for_request(draft_request, upload)
+    assert document.id is not None
+
+
+def test_delete_still_allowed_once_request_is_submitted(db, draft_request):
+    upload = UploadedFilePayload(filename="spec.pdf", content_type="application/pdf", content=b"x")
+    document = _service(db).upload_for_request(draft_request, upload)
+    draft_request.status = RequestStatus.SUBMITTED.value
+    _service(db).delete_for_request(draft_request, document.id)  # does not raise
+
+
+def test_upload_rejected_once_request_is_completed(db, draft_request):
+    draft_request.status = RequestStatus.COMPLETED.value
     upload = UploadedFilePayload(filename="spec.pdf", content_type="application/pdf", content=b"x")
     with pytest.raises(RequestNotEditableError):
         _service(db).upload_for_request(draft_request, upload)
 
 
-def test_delete_rejected_once_request_is_submitted(db, draft_request):
+def test_delete_rejected_once_request_is_completed(db, draft_request):
     upload = UploadedFilePayload(filename="spec.pdf", content_type="application/pdf", content=b"x")
     document = _service(db).upload_for_request(draft_request, upload)
-    draft_request.status = RequestStatus.SUBMITTED.value
+    draft_request.status = RequestStatus.COMPLETED.value
     with pytest.raises(RequestNotEditableError):
         _service(db).delete_for_request(draft_request, document.id)

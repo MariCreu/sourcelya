@@ -153,9 +153,11 @@ export const en: Dictionary = {
     sent: 'Sent',
     opened: 'Opened by supplier',
     in_progress: 'In progress',
-    submitted: 'Completed',
+    submitted: 'Submitted by supplier',
+    missing_information: 'Missing information',
     review_required: 'Review required',
-    completed: 'Closed'
+    conflict: 'Conflict',
+    completed: 'Complete'
   },
 
   requests: {
@@ -270,7 +272,39 @@ export const en: Dictionary = {
       conflictCurrentLabel: 'Current value:',
       conflictExtractedLabel: 'Extracted value:',
       useExtractedButton: 'Use extracted value',
-      keepCurrentButton: 'Keep current value'
+      keepCurrentButton: 'Keep current value',
+      informationStatusHeading: 'Information status',
+      fieldsAvailable: (available: number, total: number) =>
+        `${available} / ${total} requested fields available`,
+      availableHeading: 'Available',
+      missingHeading: 'Missing',
+      reviewRequiredHeading: 'Review required',
+      conflictHeading: 'Conflict',
+      noneLabel: 'None',
+      unresolvedPendingMessage: (n: number) =>
+        `${n} extraction(s) need you to specify which component they belong to before continuing`,
+      requestMissingInfoButton: 'Request missing information',
+      requestingFollowUp: 'Sending…',
+      followUpSentMessage: 'The missing-information request has been sent.',
+      followUpBlockedNothingMissing: 'Nothing is missing for this request.',
+      followUpBlockedProcessing: 'Wait for a document to finish processing.',
+      followUpBlockedReviewRequired:
+        'Resolve the pending extractions or conflicts before requesting more information.',
+      followUpBlockedDuplicate: 'This exact information was already requested.',
+      followUpBlockedNotEligible: 'This request cannot be followed up on right now.',
+      automaticFollowUpLabel: 'Automatic follow-up',
+      automaticFollowUpHint:
+        'When enabled, Sourcelya automatically requests missing information once there are no pending conflicts or reviews (capped at 3 automatic rounds).',
+      followUpRoundsHeading: 'Follow-up history',
+      roundLabel: (n: number) => `Round ${n}`,
+      roundTriggerManual: 'manual',
+      roundTriggerAutomatic: 'automatic',
+      roundFieldCount: (n: number) => `${n} field(s) requested`,
+      recoveryHeading: 'Information recovery rate',
+      recoveryText: (available: number, total: number, rate: number) =>
+        `${available} / ${total} fields available (${Math.round(rate * 100)}%)`,
+      recoveryFollowUpText: (recovered: number) =>
+        `${recovered} additional field(s) recovered through follow-up`
     }
   },
 
@@ -299,6 +333,15 @@ export const en: Dictionary = {
     submitConfirm: 'Submit this request? You can still view it afterwards, but not edit it.',
     alreadySubmittedTitle: 'Request submitted',
     alreadySubmittedBody: 'Thank you. This request has already been submitted to the company.',
+    almostThereTitle: 'Almost there',
+    almostThereBody: "Thanks for the information you've already provided. We only need:",
+    almostThereFieldLabels: {
+      packaging_type: 'Packaging type',
+      material: 'Material',
+      weight_grams: 'Weight',
+      recycled_content_percentage: 'Recycled content',
+      packaging_reference: 'Packaging reference'
+    },
     poweredBy: 'Managed with Sourcelya',
     documentsHeading: 'Documents',
     documentsHint:

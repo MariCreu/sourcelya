@@ -63,15 +63,27 @@ class Locale(str, Enum):
 
 class RequestStatus(str, Enum):
     """Stored as VARCHAR on `ComplianceRequest.status` (see this module's
-    docstring for why) — a linear state machine, advanced only by
-    `ComplianceRequestService`/`PublicRequestService`, never set directly:
+    docstring for why) — a linear-with-a-loop state machine, advanced only
+    by `ComplianceRequestService`/`PublicRequestService`, never set
+    directly:
 
-        DRAFT -> SENT -> OPENED -> IN_PROGRESS -> SUBMITTED
+        DRAFT -> SENT -> OPENED -> IN_PROGRESS -> SUBMITTED -> COMPLETED
+                            ^                         |
+                            +---- follow-up round -----+
+                              (back to IN_PROGRESS on the
+                               supplier's next edit, then
+                               SUBMITTED again)
 
-    `REVIEW_REQUIRED` and `COMPLETED` exist as states a later phase can move
-    a request into (once there's a reason to — conflicting/low-confidence
-    data, a company explicitly marking a request done) but nothing in FASE 3
-    transitions a request into either yet.
+    `COMPLETED` is only ever reached once `MissingInformationService`
+    reports every requested field AVAILABLE with no pending review/conflict
+    — see `ComplianceRequestService._reevaluate_completion` (FASE 6).
+    Revocation is not a status here: it's the orthogonal
+    `token_revoked_at`, unchanged since FASE 3.
+
+    FASE 6 removed the previously-unused `REVIEW_REQUIRED` value: it would
+    now collide in meaning with `InformationStatus.REVIEW_REQUIRED`, which
+    is a computed, per-request concept (see `MissingInformationService`),
+    never a stored workflow status.
     """
 
     DRAFT = "draft"
@@ -79,7 +91,6 @@ class RequestStatus(str, Enum):
     OPENED = "opened"
     IN_PROGRESS = "in_progress"
     SUBMITTED = "submitted"
-    REVIEW_REQUIRED = "review_required"
     COMPLETED = "completed"
 
 
@@ -103,6 +114,10 @@ class AuditEventType(str, Enum):
     EXTRACTION_FAILED = "extraction_failed"
     EXTRACTED_FIELD_ACCEPTED = "extracted_field_accepted"
     EXTRACTED_FIELD_REJECTED = "extracted_field_rejected"
+    SUPPLIER_RESUBMITTED = "supplier_resubmitted"
+    FOLLOW_UP_CREATED = "follow_up_created"
+    REQUEST_COMPLETED = "request_completed"
+    REQUEST_NEEDS_HUMAN_ATTENTION = "request_needs_human_attention"
 
 
 class DocumentType(str, Enum):
@@ -171,6 +186,12 @@ class ExtractableFieldName(str, Enum):
     """The only fields FASE 5 ever proposes values for — deliberately just
     the `PackagingComponent` columns the product spec names, not a full
     PPWR field set. See `app/services/extraction_service.py`.
+
+    FASE 6 reuses this exact set as the "requested fields" a
+    `ComplianceRequest` expects back from a supplier — see
+    `MissingInformationService`. Two different phases needing the same set
+    of five fields is a sign they should stay the *same* enum, not fork
+    into a parallel "RequestedFieldName".
     """
 
     PACKAGING_TYPE = "packaging_type"
@@ -178,3 +199,39 @@ class ExtractableFieldName(str, Enum):
     WEIGHT_GRAMS = "weight_grams"
     RECYCLED_CONTENT_PERCENTAGE = "recycled_content_percentage"
     PACKAGING_REFERENCE = "packaging_reference"
+
+
+class FieldInformationState(str, Enum):
+    """Per (packaging_component, field_name) classification computed by
+    `MissingInformationService` (FASE 6) — never stored, never inferred by
+    an LLM. See that service's module docstring for the exact deterministic
+    rule behind each value.
+
+    `NOT_APPLICABLE` is defined because the FASE 6 spec explicitly asks the
+    model to be *able* to distinguish it, but nothing produces it yet — no
+    field-applicability-by-packaging-type rule exists (that would be the
+    start of a legal rules engine, explicitly out of scope). Documented as
+    a limitation, not silently dropped.
+    """
+
+    AVAILABLE = "available"
+    MISSING = "missing"
+    REVIEW_REQUIRED = "review_required"
+    CONFLICT = "conflict"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class InformationStatus(str, Enum):
+    """Request-level rollup of every field's `FieldInformationState`,
+    computed by `MissingInformationService` — the ONLY thing Sourcelya is
+    allowed to assert about a request's data in FASE 6 (see the spec's
+    "PRINCIPIO FUNDAMENTAL": never "PPWR compliant"/"non-compliant", only
+    these four). Never a stored column — same computed-not-cached pattern
+    as `ComplianceStatus`. Priority when multiple fields disagree:
+    CONFLICT > REVIEW_REQUIRED > MISSING_INFORMATION > COMPLETE.
+    """
+
+    COMPLETE = "complete"
+    MISSING_INFORMATION = "missing_information"
+    REVIEW_REQUIRED = "review_required"
+    CONFLICT = "conflict"
