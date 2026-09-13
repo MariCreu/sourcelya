@@ -370,12 +370,109 @@ is checked off from a plan alone.
 
 ---
 
+## Infra decision: where does Sourcelya's backend live? (A vs. B vs. C)
+
+Before touching Supabase, the account/org question needs deciding first
+— it changes what the Supabase block below actually does. Comparing
+three options, optimized for **2–5 pilots, 100–500 documents/month,
+minimum fixed cost, minimum risk** — not for scale.
+
+**One fact I don't have and won't assume**: whether the existing
+Luna y Papel / InfanApp Supabase organization is *currently* on the
+Free or Pro plan, and how many projects already live in it. That
+changes Option A's real marginal cost by up to $25/month, so Option A
+below is given as two branches instead of one number. Everything else
+here doesn't depend on that fact.
+
+**What doesn't change across any of the three options**: this
+codebase's `SupabaseStorageService` and `security.py` (JWKS
+verification) call the Supabase SDK/API directly — there is no generic
+S3/OAuth abstraction layer today. That's an existing FASE 1–4 design
+choice, not something this decision reopens. It matters here because it
+means *Postgres* is the only one of the three pieces (Postgres/Auth/
+Storage) that's actually swappable for a different vendor without
+touching code — `DATABASE_URL` is just a SQLAlchemy connection string.
+Swapping Auth or Storage to a non-Supabase vendor means rewriting real,
+already-tested, already-secure code before the first pilot — that's the
+central tension in Option B below.
+
+### A) Add Sourcelya as a third project in the existing Pro org
+
+| | |
+| --- | --- |
+| **Monthly cost** | **If the org is already Pro**: ~$0–10/month marginal (Sourcelya's own project compute add-on only — the $25/mo org base is already sunk cost, shared with the other two products). **If the org is still Free today**: ~$25+/month, because Option A means upgrading that org to Pro, and that $25 base is then a cost *this decision* introduces, not one Sourcelya alone would otherwise need at pilot scale. |
+| **Includes** | No auto-pause, daily backups (typically ~7-day retention on Pro), higher storage/egress/MAU quotas, all shared at the org level. |
+| **Doesn't include** | Isolation from the other two products' outages, quota pressure, or billing changes — a spike in *any* of the three projects' usage shows up on the same invoice and same org dashboard. |
+| **Complexity** | Lowest to set up (a few clicks in an org you already administer). |
+| **Security** | Each project still gets its own isolated Postgres/Auth/Storage instance under Supabase's model — no data mixing between products at the database level. The real exposure isn't data mixing, it's **operational coupling**: the same org owner/billing contact, the same org-level settings, and (per the audit's own top risk) if Sourcelya's public portal is ever hit by a runaway-cost scenario before rate limiting ships, it's on the same invoice as two live consumer products. |
+| **Backups** | Whatever the org's Pro plan already provides, for free (marginal cost is genuinely ~$0 for this specific line item if already Pro). |
+| **Auth** | Zero code changes — same Supabase Auth integration this codebase already has. |
+| **Storage** | Zero code changes — same `SupabaseStorageService`, new bucket in the new project. |
+| **Migration effort from today** | Lowest of the three: create a project, point `.env`/hosting secrets at it, done. |
+| **Lock-in** | Same Supabase lock-in the codebase already has (see above) — Option A doesn't add any *new* lock-in, it just also couples Sourcelya's continuity to two unrelated products' continuity. |
+| **Recommendation** | Only makes sense if the org is **already** Pro *and* you're comfortable with that operational coupling. Given Sourcelya is a distinct product for a distinct (B2B, compliance-adjacent) audience from two consumer apps, I'd still lean away from this even at $0 marginal cost — see C. |
+
+### B) Keep Luna y Papel / InfanApp as-is; give Sourcelya its own cheap stack
+
+This splits into two real sub-options, because "a cheap combination of
+Postgres/Auth/Storage" means very different things depending on whether
+Supabase itself stays in the mix:
+
+**B1 — a separate Supabase project (Free tier), just not in the same org as the other two.** This is functionally identical to Option C below (same vendor, same zero-code-change property, same isolation) — the only distinction from C is *which org* holds it. See C for the full comparison; there's no reason to prefer "a second free project crammed into the existing org" over "a clean second org" once you're already creating a new project, and free-tier orgs are commonly capped at 2 active free projects — if Luna y Papel + InfanApp already occupy both slots, B1 may not even be available without upgrading or pausing one of them. **Effectively: B1 collapses into C.**
+
+**B2 — genuinely different vendors** (e.g., Neon or Railway for Postgres, Auth0/Clerk/a self-rolled auth for Auth, Cloudflare R2/Backblaze B2 for Storage):
+
+| | |
+| --- | --- |
+| **Monthly cost** | Likely the cheapest on paper — most of these have generous free tiers too (Neon free Postgres, Cloudflare R2's free egress, etc.) — plausibly $0–10/month. |
+| **Includes** | Whatever each vendor's free/cheapest tier includes — varies per vendor, needs its own research pass if chosen. |
+| **Doesn't include** | Any of it talks to any of the others — three separate dashboards, three separate credential sets to rotate, three separate incident surfaces instead of one. |
+| **Complexity** | **Highest of the three options.** Not because any single vendor is hard, but because "Postgres here, Auth there, Storage somewhere else" is more moving parts to operate than one platform, right at the moment (first pilots) when operational simplicity matters most. |
+| **Security** | Each vendor's own model — nothing wrong with any of them individually, but it means re-doing the JWT verification threat-modeling work this codebase already did for Supabase JWKS (see README's security section) for a new provider, from scratch, before the first pilot. |
+| **Backups** | Vendor-dependent, needs its own research per vendor. |
+| **Auth** | **Requires rewriting `app/core/security.py` and the frontend's Supabase Auth client integration** — not a config change, a real engineering task with its own tests, done under time pressure before a pilot, which directly conflicts with "mínimo riesgo." |
+| **Storage** | **Requires rewriting `SupabaseStorageService`** — same category of real work as Auth above. |
+| **Migration effort from today** | **Highest of the three** — this is the one option that's genuinely new code, not a config/account decision. |
+| **Lock-in** | Trades Supabase lock-in for a different vendor's lock-in on each piece — not actually less lock-in overall, just different, at the cost of real engineering time to get there. |
+| **Recommendation** | **Not recommended before the first pilot.** The cost savings versus B1/C (a free Supabase project) are close to zero at this volume, while the engineering risk and time cost are real and immediate. This is worth revisiting later purely on its own merits (e.g., if a specific vendor's Auth product is genuinely better for Sourcelya's needs) — not as a cost-driven decision now. |
+
+### C) Sourcelya in its own, separate Supabase organization
+
+| | |
+| --- | --- |
+| **Monthly cost** | **$0/month to start** (a fresh org's Free tier), with the option to upgrade *this org specifically* to Pro ($25/month) later, purely when Sourcelya's own usage or reliability needs justify it — not coupled to the other two products' plans. |
+| **Includes** | Everything the Free tier includes today (see the Section 2 cost table above): ~500MB DB, ~1GB storage, Auth included, no cost while validating pilots. |
+| **Doesn't include** | No auto-scaling protection against the free tier's own limits (500MB DB, 1GB storage) — very unlikely to matter at 100–500 documents/month early on, but worth watching. **No paid-tier backups** — free-tier Supabase projects don't get the daily-backup feature Pro does; this is a real gap the audit already flagged and it applies identically whether this project sits alone or alongside the other two, so it doesn't change the A-vs-C comparison, only whether it's fixed via upgrading *this* org later. **Free-tier project pause after ~1 week of inactivity** — same caveat as in the original cost table; a `curl` against `/api/health` on a schedule, or just enough pilot activity, avoids it in practice. |
+| **Complexity** | Same as A: a few clicks, this time in a brand-new org. Marginally more account-management overhead (a separate login/billing contact to track) — trivial at this scale. |
+| **Security** | **Best isolation of the three options** — Sourcelya's pilot companies' supplier data, documents, and auth users never share an organization, a billing account, or an admin surface with two unrelated consumer products. This also directly helps the GDPR/privacy checklist item already in this doc: a data-processing/subprocessor disclosure for Sourcelya's pilots is simpler to write and reason about when Sourcelya's infrastructure footprint doesn't also encompass unrelated consumer-app data. |
+| **Backups** | Same free-tier gap as everywhere else at $0/month; identical upgrade path to Pro, scoped only to Sourcelya, whenever it's justified. |
+| **Auth** | Zero code changes. |
+| **Storage** | Zero code changes. |
+| **Migration effort from today** | Same as A — lowest of the three, a project-creation task, not an engineering task. |
+| **Lock-in** | Same pre-existing Supabase lock-in as every option that keeps Supabase (A, B1, C) — no better or worse than A on this axis. |
+| **Contractual reasonableness** | Running a second, independent Supabase organization for a genuinely separate product under the same person/company is standard SaaS practice, not a workaround — this isn't "tricking" a per-account free-tier limit, it's the normal shape of "one org per product line." The one thing worth a two-minute check before creating it: Supabase's current Terms of Service / free-tier policy on multiple organizations per billing identity, since free-tier limits are exactly the kind of detail providers adjust over time — I'd rather you glance at supabase.com's current pricing/terms page yourself than have me assert certainty about a contract I can't verify live. |
+| **Recommendation** | **This is my recommendation.** Zero engineering risk (same integrations, same code), zero coupling to Luna y Papel/InfanApp's reliability or billing, $0/month to start, and it keeps the door open to upgrade Sourcelya to Pro on its own timeline — purely driven by Sourcelya's own pilot traction, not shared with unrelated products. |
+
+### Summary
+
+| | A (shared Pro org) | B2 (multi-vendor) | C (separate org, recommended) |
+| --- | --- | --- | --- |
+| Cost at pilot scale | $0–10/mo *if already Pro*, $25+/mo if not | ~$0–10/mo | $0/mo |
+| Code changes needed | None | Auth + Storage rewrite | None |
+| Isolation from other products | Low | N/A (not applicable) | High |
+| Risk before first pilot | Low (but coupled) | High (new untested integrations) | Lowest |
+| Recommendation | Only if already Pro and coupling is acceptable | Not now | **Yes** |
+
+*(B1 is omitted from this table because it's the same thing as C, just
+in the existing org instead of a new one — see B1's note above.)*
+
+---
+
 ## Next block
 
-Per the working agreement for this phase, I'm stopping here for review.
-The natural next block is **Section 3 (Supabase)**, since almost
-everything else (auth, storage, database, migrations) is gated on a real
-Supabase project existing — once you confirm, I'll give exact
-click-by-click instructions for what to create, tell you exactly which
-value to copy where, and never ask for more than the specific value
-needed at that step.
+Stopping here per your instruction — no Supabase or provider account has
+been touched. Once you confirm which of A/B/C to go with (and, if A,
+confirm whether that org is currently Free or Pro so I can pin the exact
+number), the next block is **Section 3 (Supabase)**: exact click-by-click
+instructions for what to create, which value to copy where, and never
+more secrets than the specific step needs.
