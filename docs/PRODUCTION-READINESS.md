@@ -578,6 +578,22 @@ done, still within "Supabase," not the next one.
 | Database password | **Secret** | Full database access if leaked |
 | Full database connection string | **Secret** | It's the password above, embedded in a URL |
 
+**Confirmed done**: organization created (Pro), project created
+(`pqvaqsvcfapiuhgfwlon.supabase.co`, region `eu-west-1` / West EU
+Ireland), single project in the org as intended. Project name is still
+the Supabase default ("MariCreu's Project") — purely cosmetic, optional
+rename later, no functional effect.
+
+**Note on tooling**: this session has a Supabase MCP connection
+available, but `list_projects` shows it's scoped to the **existing**
+organization (Luna y Papel + InfanApp only) — it does not see the new
+Sourcelya project at all. That's actually a good sign for the isolation
+goal (Sourcelya's org genuinely isn't reachable through whatever
+connected that integration), but it also means I can't verify or
+configure Sourcelya's Supabase project through tools — everything stays
+manual, through the dashboard, exactly as you asked. I won't use that
+MCP connection for anything Sourcelya-related.
+
 ### 8. What never to paste into this chat
 
 To be explicit, since you asked: **nothing from step 7's "Secret" row,
@@ -595,12 +611,44 @@ The Project URL and the region chosen are the only two things from this
 block worth telling me directly, once done — both are public/non-
 sensitive and let me sanity-check we're aligned before moving on.
 
+### 9. Storage bucket (next manual step)
+
+- In the Sourcelya project: left sidebar → **Storage** → **New bucket**.
+- Name it exactly **`sourcelya-documents`** — that's the default the
+  backend already expects (`SUPABASE_STORAGE_BUCKET` in
+  `backend/app/core/config.py`), so using this exact name means no extra
+  environment variable override is needed later.
+- **Public bucket: leave this OFF (private).** Confirmed by reading
+  `SupabaseStorageService` just now — every request it makes (upload,
+  download, delete, signed URL) authenticates with the `service_role`
+  key, which bypasses bucket privacy/RLS entirely. There is never a
+  reason for a document to be reachable by a plain public URL; the
+  backend is always the one fetching it, then serving it to an
+  authenticated company user.
+- **No storage policies (RLS) need to be created.** Same reason: the
+  backend only ever talks to Storage as `service_role`, which ignores
+  bucket policies by design. Supabase may prompt you to add a policy
+  when the bucket is private and empty — you can skip that prompt.
+- Optional, not required: Supabase lets you set a bucket-level max file
+  size and allowed MIME types at creation. The backend already enforces
+  20MB / `pdf,xlsx,csv,docx,png,jpg,jpeg` on every upload
+  (`MAX_UPLOAD_SIZE_MB`, `ALLOWED_UPLOAD_EXTENSIONS`), so this would only
+  be a defense-in-depth duplicate, not a gap — skip it for now unless you
+  want the extra belt-and-braces layer.
+
+Nothing else to configure in Storage. Let me know once the bucket
+exists (its name and "private" is all I need confirmed) and we'll move
+to the last Supabase item: the two API keys and the database connection
+string — which don't get pasted here, they go straight into the hosting
+provider once we reach that block.
+
 ---
 
 ## Next block
 
-Stopping here — waiting for confirmation that steps 1–4 above are done
-(organization created, Pro selected, project created, region chosen)
-before continuing to the storage bucket and the rest of the Supabase
-block. Nothing beyond Supabase (Render, Cloudflare, email, Anthropic,
-malware scanning) starts until this whole block is verified working.
+Waiting on the Storage bucket (step 9) before considering the Supabase
+block done. After that's confirmed, the remaining Supabase item is
+purely "know where the anon key / service_role key / connection string
+are" (already documented in step 6) — nothing left to create. Nothing
+beyond Supabase (Render, Cloudflare, email, Anthropic, malware scanning)
+starts until this whole block is verified working.
