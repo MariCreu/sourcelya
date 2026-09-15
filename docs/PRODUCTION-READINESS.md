@@ -805,17 +805,23 @@ keeps happening, check the GitHub App's webhook delivery log on the
 `sourcelya` repo.
 
 **Still outstanding from this block**:
-- [ ] **Plan is Free, not Starter** — no tool in this Render MCP updates
-      an existing service's instance type; needs the dashboard
-      (Settings → Instance Type). Free sleeps after inactivity.
+- [ ] **Plan is Free, not Starter** — decided to stay on Free rather
+      than upgrade. Free sleeps after ~15 min of inactivity; the plan is
+      to compensate with an external ping every few minutes ("como en
+      otras partes") instead of paying for Starter. Mechanism not yet
+      defined — needs the user to confirm what that existing pattern is
+      (external uptime service, Render cron job, etc.) before building
+      anything.
 - [ ] **Rotate the database password.** It was pasted into this chat
       twice while debugging the connection string above — treat it as
-      compromised regardless of channel privacy. Reset it in Supabase
-      (Database → Reset database password) and update `DATABASE_URL` in
-      Render to match.
-- [ ] `SUPABASE_SERVICE_ROLE_KEY` still isn't set — nothing has
-      exercised Storage yet, so this hasn't blocked a deploy, but upload/
-      download endpoints will fail until it's added.
+      compromised regardless of channel privacy. This requires the user
+      to do it in Supabase (Database → Reset database password) — no
+      Supabase access is available from this session to do it directly.
+      Once rotated, `DATABASE_URL` needs updating in Render to match.
+- [x] `SUPABASE_SERVICE_ROLE_KEY` set in Render (2026-09-15). Value was
+      pasted into chat — same compromised-by-channel caveat as the DB
+      password; rotate later via Supabase Settings → API if full key
+      hygiene is wanted, and update Render again if so.
 - [x] `https://sourcelya.onrender.com/api/health` confirmed returning
       `200`/`{"status":"ok"}` from a real browser.
 
