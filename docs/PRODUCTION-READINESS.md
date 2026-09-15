@@ -760,9 +760,67 @@ migrations actually ran, not just that uvicorn started.
 
 ---
 
+## Render block — done, with real findings along the way
+
+The service (`sourcelya`, `srv-dakjrr95efls73e93680`) is live at
+`https://sourcelya.onrender.com`, connected to the real Sourcelya
+Supabase Postgres, with all five migrations applied
+(`0001`–`0005`). Confirmed in the deploy logs: all five
+`alembic.runtime.migration` upgrade steps, then a clean
+`Uvicorn running` / `Application startup complete`, then Render's own
+"Your service is live 🎉".
+
+Once the Render MCP connector became available mid-block, configuration
+moved from "give exact dashboard steps" to doing it directly — but three
+real, non-obvious problems came up getting there, all now fixed:
+
+1. **Render's "Docker Command" field doesn't parse `sh -c "cmd1 && cmd2"`
+   shell syntax** — it treated the entire configured string as one
+   literal (non-existent) command name and failed with "not found".
+   Fixed by committing `backend/start.sh` (runs `alembic upgrade head`
+   then `exec uvicorn ...`) and pointing the Docker Command at that one
+   file instead — sidesteps whatever exact tokenization the platform
+   field does, since there's nothing left to mis-parse.
+2. **Alembic crashed on a percent-encoded character in the password**
+   (`%40` for `@`) — `alembic/env.py` handed the URL straight to
+   `Config.set_main_option()`, which stores it on a `ConfigParser` that
+   treats a bare `%` as the start of a `%(name)s` interpolation
+   reference. Fixed by escaping `%` → `%%` in that one call only (see
+   the commit for why this is scoped correctly — nothing else reads
+   `settings.database_url` through `ConfigParser`).
+3. **Supabase's "Direct connection" string resolves to an IPv6-only
+   address**, which Render's network can't reach ("Network is
+   unreachable"). Fixed by switching to Supabase's connection dialog →
+   Transaction pooler → **"Use IPv4 connection"** toggle ON, which gives
+   a `postgres.<ref>@aws-<n>-<region>.pooler.supabase.com:6543` host
+   instead. Document this for the next time a connection string is
+   needed (email service, any future direct-DB tooling): always the
+   IPv4 pooler form, never the bare `db.<ref>.supabase.co` direct-connect
+   host.
+
+**Also found**: the GitHub→Render auto-deploy webhook did not fire on at
+least two consecutive pushes (deploys kept redeploying a stale commit
+until manually triggered via `trigger_deploy`) — worth watching; if it
+keeps happening, check the GitHub App's webhook delivery log on the
+`sourcelya` repo.
+
+**Still outstanding from this block**:
+- [ ] **Plan is Free, not Starter** — no tool in this Render MCP updates
+      an existing service's instance type; needs the dashboard
+      (Settings → Instance Type). Free sleeps after inactivity.
+- [ ] **Rotate the database password.** It was pasted into this chat
+      twice while debugging the connection string above — treat it as
+      compromised regardless of channel privacy. Reset it in Supabase
+      (Database → Reset database password) and update `DATABASE_URL` in
+      Render to match.
+- [ ] `SUPABASE_SERVICE_ROLE_KEY` still isn't set — nothing has
+      exercised Storage yet, so this hasn't blocked a deploy, but upload/
+      download endpoints will fail until it's added.
+- [ ] Confirm `https://sourcelya.onrender.com/api/health` returns `200`
+      from a real browser (this environment's own egress proxy blocks
+      arbitrary outbound domains, so it couldn't be curled from here).
+
 ## Next block
 
-Waiting on the Render service to exist and `/api/health` to respond
-before this block is done. `api.sourcelya.com` doesn't get pointed at it
-yet — that DNS step happens together with the rest of Cloudflare, in its
-own block.
+`api.sourcelya.com` doesn't get pointed at this service yet — that DNS
+step happens together with the rest of Cloudflare, in its own block.
