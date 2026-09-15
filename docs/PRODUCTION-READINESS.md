@@ -893,11 +893,45 @@ not by assuming Cloudflare Pages' defaults would just work.
   via MCP once the Cloudflare Pages custom domain step below is done),
   not a Cloudflare step.
 
+**Real deploy attempts hit three more issues, in order** (no Cloudflare
+MCP exists in this session — every fix here is either a repo change or a
+manual dashboard instruction, never a direct API call):
+1. The user's Cloudflare project used the newer git-connected **Workers**
+   deploy flow (`npx wrangler deploy`), not classic Pages'
+   build-output-directory config — failed with "Could not detect a
+   directory containing static files" (for the landing) since no
+   Wrangler config existed anywhere in the repo telling it which
+   directory to upload. Fixed by adding `web/wrangler.jsonc` (assets
+   directory `./`) and, pre-emptively, `frontend/wrangler.jsonc` (assets
+   directory `./dist/frontend/browser`, `not_found_handling:
+   single-page-application` for Angular's client-side router).
+2. The frontend project's build then failed on
+   `npm error enoent ... /opt/buildhome/repo/package.json` — the build
+   command was running at the repo root, which has no `package.json`
+   (each of `backend/`, `frontend/`, `web/` has its own). Root cause:
+   the project's **Root directory** setting wasn't set to `frontend`.
+3. After setting Root directory, deploy failed with **"root directory
+   not found"** — because this repo's `main` branch is nearly empty
+   (confirmed via `git ls-tree -r origin/main`: one file, `README.md`
+   — all real work lives on `claude/packproof-saas-mvp-acqbew`), and the
+   Cloudflare project's **Production branch** was still `main`, which
+   has no `frontend/` (or `web/`) directory at all. This surfaces a
+   decision that was already flagged as pending in this doc: which
+   branch is actually "production." Not resolved here — for now the
+   Cloudflare projects' Production branch is being pointed at
+   `claude/packproof-saas-mvp-acqbew` to unblock the deploy; merging to
+   `main` (or renaming what "production" means) is still open.
+   "Retry deployment" on an already-failed run appears to replay that
+   run's original frozen settings rather than the project's current
+   config — a fresh commit (forcing a new webhook-triggered build) was
+   used instead to pick up the corrected branch/root-directory settings.
+
 **Still outstanding from this block** (all manual — see chat for the
 exact click-by-click):
 - [ ] Cloudflare Pages project #1: `web/` → `sourcelya.com` + `www.`
+      (in progress — debugging wrangler/root-directory/branch config)
 - [ ] Cloudflare Pages project #2: `frontend/` → `app.sourcelya.com`
-      (build output directory MUST be `dist/frontend/browser`)
+      (not started yet — same wrangler.jsonc fix pre-applied)
 - [ ] DNS: root + `www` + `app` records in Cloudflare
 - [ ] `api.sourcelya.com` CNAME → the existing Render service
 - [ ] Supabase anon key → fill into `environment.production.ts` and
@@ -905,6 +939,9 @@ exact click-by-click):
 - [ ] Update `FRONTEND_BASE_URL` in Render to `https://app.sourcelya.com`
       once the app subdomain resolves (I can do this part once the user
       confirms the domain is live)
+- [ ] Decide the real production branch (`main` is empty; everything is
+      currently deployed from the feature branch) — separate from this
+      block, previously flagged, still open
 
 ## Next block
 
