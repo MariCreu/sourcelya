@@ -9,7 +9,14 @@ from app.models import *  # noqa: F401,F403  (registers all models on Base.metad
 
 config = context.config
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# set_main_option() stores this on a ConfigParser, whose default
+# interpolation treats a bare "%" as the start of a %(name)s reference — a
+# URL-encoded character in the password (e.g. "%40" for "@") then raises
+# "invalid interpolation syntax" instead of connecting. Doubling "%" is
+# configparser's own escape for a literal percent; nothing else reads
+# settings.database_url through configparser, so this is scoped to just
+# this one call.
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
