@@ -849,7 +849,63 @@ keeps happening, check the GitHub App's webhook delivery log on the
 - [x] `https://sourcelya.onrender.com/api/health` confirmed returning
       `200`/`{"status":"ok"}` from a real browser.
 
+## Cloudflare block (frontend + landing)
+
+No Cloudflare MCP/API access exists in this session, so this entire block
+is manual clicks by the user — verified here by auditing the repo first,
+not by assuming Cloudflare Pages' defaults would just work.
+
+**Audited before instructing anything**:
+- `frontend/` uses Angular's new `application` builder
+  (`@angular-devkit/build-angular:application`, confirmed in
+  `angular.json`). This builder **always nests browser output under a
+  `browser/` subfolder** — `npm run build` was actually run here and
+  confirmed output lands at `dist/frontend/browser/`, not `dist/frontend/`.
+  This is the single most common Cloudflare Pages + Angular misconfig
+  (pointing the build output directory at the parent folder serves the
+  raw folder listing instead of the app) — called out explicitly below.
+- Angular app has client-side routing (`app.routes.ts`) and no
+  `_redirects` file existed yet, so a direct load/refresh of e.g.
+  `/dashboard` or `/request/:token` would 404 on any static host. Added
+  `frontend/public/_redirects` (`/* /index.html 200`) — Angular's asset
+  pipeline copies `public/**` into the build output, confirmed present at
+  `dist/frontend/browser/_redirects` after a real build.
+- `web/` (the landing) already had a working `_redirects` (`/ /es/ 302`)
+  from FASE 1.5 — Cloudflare Pages supports the same Netlify-style
+  `_redirects` format natively, so nothing to change there.
+- `frontend/src/environments/environment.production.ts` already pointed
+  `apiBaseUrl` at `https://api.sourcelya.com/api` (set during the
+  rebrand). `supabaseUrl` was still the `your-project.supabase.co`
+  placeholder — filled in now with the real project
+  (`https://pqvaqsvcfapiuhgfwlon.supabase.co`, known from the Supabase
+  block). `supabaseAnonKey` is still a placeholder — needs the real
+  value, which is safe to paste in chat (it's the public anon key,
+  meant to ship in client code, gated by RLS — unlike the service_role
+  key or DB password).
+- `backend/app/main.py` builds CORS from a **single** origin
+  (`allow_origins=[settings.frontend_base_url]`), and the same
+  `FRONTEND_BASE_URL` setting is also what gets embedded in the
+  supplier-facing `/request/:token` links sent by email
+  (`compliance_request_service.py`, `follow_up_service.py`). So once
+  `app.sourcelya.com` exists, `FRONTEND_BASE_URL` in Render needs
+  updating to `https://app.sourcelya.com` — both CORS and supplier email
+  links break otherwise. This is a Render env var (I can set it myself
+  via MCP once the Cloudflare Pages custom domain step below is done),
+  not a Cloudflare step.
+
+**Still outstanding from this block** (all manual — see chat for the
+exact click-by-click):
+- [ ] Cloudflare Pages project #1: `web/` → `sourcelya.com` + `www.`
+- [ ] Cloudflare Pages project #2: `frontend/` → `app.sourcelya.com`
+      (build output directory MUST be `dist/frontend/browser`)
+- [ ] DNS: root + `www` + `app` records in Cloudflare
+- [ ] `api.sourcelya.com` CNAME → the existing Render service
+- [ ] Supabase anon key → fill into `environment.production.ts` and
+      redeploy
+- [ ] Update `FRONTEND_BASE_URL` in Render to `https://app.sourcelya.com`
+      once the app subdomain resolves (I can do this part once the user
+      confirms the domain is live)
+
 ## Next block
 
-`api.sourcelya.com` doesn't get pointed at this service yet — that DNS
-step happens together with the rest of Cloudflare, in its own block.
+Email (Resend) or the Anthropic API key — whichever the user picks next.
