@@ -636,19 +636,42 @@ sensitive and let me sanity-check we're aligned before moving on.
   be a defense-in-depth duplicate, not a gap — skip it for now unless you
   want the extra belt-and-braces layer.
 
-Nothing else to configure in Storage. Let me know once the bucket
-exists (its name and "private" is all I need confirmed) and we'll move
-to the last Supabase item: the two API keys and the database connection
-string — which don't get pasted here, they go straight into the hosting
-provider once we reach that block.
+**Confirmed done**: `sourcelya-documents` bucket created, private.
+
+## Supabase block — done
+
+Everything Supabase needs for now exists: organization ("Sourcelya",
+Pro), project (`pqvaqsvcfapiuhgfwlon`, `eu-west-1`), storage bucket
+(`sourcelya-documents`, private, no RLS needed). The remaining values
+(anon key, service_role key, connection string — step 6's table) aren't
+created, they're just *read* from Settings → API / Settings → Database
+when we actually configure the backend hosting — nothing more to do in
+the Supabase dashboard itself until then.
+
+## Repo cleanup (started, not finished)
+
+Also done in this block, at your request: the GitHub repo was renamed
+`prueba-tecnica` → **`sourcelya`** (GitHub auto-redirects the old URL,
+all history preserved). Found in the process: the repo had a leftover
+`master` branch from the *original* technical-test exercise (an
+unrelated Java/Spring Boot car-pricing API) — genuinely irrelevant to
+Sourcelya, safe to delete. I can't delete it myself (this session's auto
+mode blocks destructive git operations, and there's no GitHub API tool
+for branch deletion either) — **still pending**: delete `master` via
+`github.com/MariCreu/sourcelya/branches`. The `main` branch (the repo's
+default) is untouched — it only has a placeholder README; real code
+still lives on `claude/packproof-saas-mvp-acqbew`, and reconciling that
+is deliberately deferred to the deployment block, not done ad hoc here.
 
 ---
 
 ## Next block
 
-Waiting on the Storage bucket (step 9) before considering the Supabase
-block done. After that's confirmed, the remaining Supabase item is
-purely "know where the anon key / service_role key / connection string
-are" (already documented in step 6) — nothing left to create. Nothing
-beyond Supabase (Render, Cloudflare, email, Anthropic, malware scanning)
-starts until this whole block is verified working.
+Supabase is done. Waiting on your call for what's next: Render (backend
+hosting), Cloudflare Pages (frontend/landing), email (Resend + DNS),
+Anthropic (API key + the Sonnet 5 vs. Opus 5 decision), or malware
+scanning — whichever order you'd like to tackle them in. My suggested
+order (from the original audit's dependency chain) is Render next, since
+the backend needs somewhere to run before email/Anthropic/malware
+scanning configuration can actually be exercised end to end — but happy
+to take them in whatever order you prefer.
