@@ -675,3 +675,94 @@ order (from the original audit's dependency chain) is Render next, since
 the backend needs somewhere to run before email/Anthropic/malware
 scanning configuration can actually be exercised end to end — but happy
 to take them in whatever order you prefer.
+
+## Render setup — step by step (Block 3, in progress)
+
+**One real finding before the steps**: reading `backend/Dockerfile`
+just now — its `CMD` is bare `uvicorn app.main:app ...`, with **no
+`alembic upgrade head`** baked in. Locally, `docker-compose.yml`
+supplies that via a command override; a plain Render deploy of this
+same Dockerfile would start the API immediately with **no tables
+created**, and every DB-touching request would fail while looking like
+a "successful" deploy (container up, health check green). This gets
+fixed with a Render-side start-command override in step 3 below — no
+Dockerfile changes needed, same image, same local behavior.
+
+### 1. Account + connect the repo
+
+- Sign up at render.com — GitHub OAuth is the simplest path.
+- When it asks for repository access: choose **"Only select
+  repositories"** and pick just `sourcelya` — not "All repositories."
+  Same least-privilege principle as everything else in this phase.
+
+### 2. New Web Service
+
+- Dashboard → **New → Web Service** → select the `sourcelya` repo.
+- **Branch**: `claude/packproof-saas-mvp-acqbew` for now — `main` is
+  still just a placeholder README (see the Repo cleanup note above), so
+  it has no code to deploy. Revisit which branch is "production" before
+  real pilots start; not decided here.
+- **Root Directory**: `backend` — so Render finds `backend/Dockerfile`
+  and uses `backend/` as the build context (mirrors
+  `docker-compose.yml`'s `build: ./backend`).
+- **Runtime**: Docker (should auto-detect once Root Directory is set).
+- **Region**: Frankfurt — closest Render region to the Supabase project
+  (Ireland) and to Spain/EU.
+- **Instance type**: the smallest **paid** tier ("Starter" or
+  equivalent) — **not Free**. Render's free tier sleeps after
+  inactivity, which means the first supplier who opens a link after a
+  quiet period would hit a cold start; not acceptable for a pilot-facing
+  link. Exact current pricing: check at signup, not asserted here.
+
+### 3. Start command override (the fix for the finding above)
+
+Render lets you override the Dockerfile's `CMD` with a custom start
+command — look for a field named **"Docker Command"** or **"Start
+Command"** in the service's settings. Set it to:
+
+```
+sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+```
+
+This is exactly what `docker-compose.yml` already does locally — same
+behavior, no Dockerfile change, migrations run automatically on every
+deploy.
+
+### 4. Environment variables — what to set now vs. later
+
+Render's environment variable UI is where every secret below goes —
+**never into this chat**. Set these now:
+
+| Variable | Value | Notes |
+| --- | --- | --- |
+| `ENVIRONMENT` | `production` | |
+| `DEBUG` | `false` | |
+| `DATABASE_URL` | Supabase's connection string | Settings → Database → Connection string (URI). **Secret.** |
+| `SUPABASE_URL` | `https://pqvaqsvcfapiuhgfwlon.supabase.co` | Public, already known |
+| `SUPABASE_SERVICE_ROLE_KEY` | from Settings → API | **Secret.** |
+| `SUPABASE_STORAGE_BUCKET` | `sourcelya-documents` | Matches the bucket already created — set explicitly rather than relying on the code default, so a future default change can't silently redirect production |
+| `SUPABASE_JWT_STRATEGY` | `jwks` | Same reasoning — pin it explicitly rather than relying on the default |
+| `INTERNAL_JOBS_SECRET` | a random value | Render has a "Generate" option for env vars — use it instead of typing one |
+
+Leave these **unset for now** — their blocks haven't happened yet, and
+leaving them unset just keeps the app in its current safe local-fallback
+behavior (no real email sent, no real extraction) until we get there:
+`RESEND_API_KEY`, `ANTHROPIC_API_KEY`, `DOCUMENT_EXTRACTION_PROVIDER`,
+`FRONTEND_BASE_URL` (no frontend exists yet to set CORS for).
+
+### 5. Verify
+
+Once deployed, Render gives it a default URL like
+`https://sourcelya-api.onrender.com` (or similar) before any custom
+domain is attached. Check `https://<that-url>/api/health` returns
+`200` — that's the point where we know both the container **and** the
+migrations actually ran, not just that uvicorn started.
+
+---
+
+## Next block
+
+Waiting on the Render service to exist and `/api/health` to respond
+before this block is done. `api.sourcelya.com` doesn't get pointed at it
+yet — that DNS step happens together with the rest of Cloudflare, in its
+own block.
