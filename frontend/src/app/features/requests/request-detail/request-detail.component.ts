@@ -37,10 +37,10 @@ const CONFIDENCE_BADGE_CLASSES: Record<ConfidenceLevel, string> = {
 
 const FIELD_INFORMATION_BADGE_CLASSES: Record<FieldInformationState, string> = {
   available: 'status-green',
-  missing: 'status-orange',
-  review_required: 'status-red',
+  missing: 'status-neutral',
+  review_required: 'status-orange',
   conflict: 'status-red',
-  not_applicable: 'status-orange'
+  not_applicable: 'status-neutral'
 };
 
 const FOLLOW_UP_ERROR_KEYS: Record<string, string> = {

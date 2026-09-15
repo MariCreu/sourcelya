@@ -2,33 +2,39 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 32px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  padding: 0 32px;
+  height: 64px;
+  background: var(--color-navy-950);
 
   .logo {
-    font-weight: 700;
+    font-family: var(--font-display);
+    font-weight: 600;
     font-size: 18px;
-    color: var(--color-text);
+    color: #fff;
     text-decoration: none;
   }
 
   nav {
     display: flex;
-    gap: 24px;
+    gap: 30px;
 
     a {
-      color: var(--color-text-muted);
+      display: inline-block;
+      padding: 22px 0;
+      color: #9fb0c4;
       text-decoration: none;
       font-size: 14px;
       font-weight: 500;
+      border-bottom: 2px solid transparent;
 
       &.active {
-        color: var(--color-text);
+        color: #fff;
+        font-weight: 600;
+        border-bottom-color: var(--color-accent);
       }
 
       &:hover {
-        color: var(--color-text);
+        color: #fff;
       }
     }
   }
@@ -38,16 +44,34 @@
   display: flex;
   align-items: center;
   gap: 16px;
+
+  /* app-locale-switch defaults to dark-on-light (it's also used on the
+     light auth-card in login/signup) — re-themed here for the dark bar. */
+  ::ng-deep .locale-switch {
+    border-color: var(--color-navy-700);
+
+    button {
+      color: #7c8fa5;
+    }
+
+    button.active {
+      color: #fff;
+    }
+
+    .divider {
+      color: var(--color-navy-700);
+    }
+  }
 }
 
 .link-button {
   background: none;
   border: none;
-  color: var(--color-text-muted);
+  color: #9fb0c4;
   cursor: pointer;
   font-size: 14px;
 
   &:hover {
-    color: var(--color-text);
+    color: #fff;
   }
 }
