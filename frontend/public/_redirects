@@ -1,4 +1,0 @@
-# Cloudflare Pages (and Netlify) SPA fallback: Angular's router handles
-# routing client-side, so every path must still serve index.html instead
-# of 404ing on direct load/refresh (e.g. /dashboard, /request/:token).
-/*    /index.html   200
