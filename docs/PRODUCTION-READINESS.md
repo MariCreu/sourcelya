@@ -816,9 +816,8 @@ keeps happening, check the GitHub App's webhook delivery log on the
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` still isn't set — nothing has
       exercised Storage yet, so this hasn't blocked a deploy, but upload/
       download endpoints will fail until it's added.
-- [ ] Confirm `https://sourcelya.onrender.com/api/health` returns `200`
-      from a real browser (this environment's own egress proxy blocks
-      arbitrary outbound domains, so it couldn't be curled from here).
+- [x] `https://sourcelya.onrender.com/api/health` confirmed returning
+      `200`/`{"status":"ok"}` from a real browser.
 
 ## Next block
 
