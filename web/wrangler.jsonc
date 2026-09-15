@@ -1,0 +1,12 @@
+{
+  // Tells `wrangler deploy` this is a static-assets site, not a Worker
+  // script — without this, wrangler has no way to know which directory
+  // to upload and fails with "Could not detect a directory containing
+  // static files". Root Directory is set to `web` in the Cloudflare
+  // project, so this file's `./` resolves to `web/` itself.
+  "name": "sourcelys-landing",
+  "compatibility_date": "2026-09-15",
+  "assets": {
+    "directory": "./"
+  }
+}

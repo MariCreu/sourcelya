@@ -1,0 +1,17 @@
+{
+  // Same fix as web/wrangler.jsonc: tells `wrangler deploy` where the
+  // built static files live. Root Directory is `frontend` in the
+  // Cloudflare project, and Angular's `application` builder always
+  // nests browser output under `dist/frontend/browser/` — confirmed
+  // with a real build, see docs/PRODUCTION-READINESS.md.
+  // `single-page-application` mode means any path with no matching
+  // file falls back to index.html, so Angular's client-side router
+  // handles it (belt-and-suspenders with public/_redirects, which
+  // covers hosts that don't understand this Workers-specific option).
+  "name": "sourcelys-app",
+  "compatibility_date": "2026-09-15",
+  "assets": {
+    "directory": "./dist/frontend/browser",
+    "not_found_handling": "single-page-application"
+  }
+}
