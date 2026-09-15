@@ -14,12 +14,31 @@
   padding: 32px 16px 64px;
 }
 
+.portal-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 28px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 17px;
+  color: var(--color-text);
+
+  svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--color-text);
+  }
+}
+
 .portal-header {
   margin-bottom: 24px;
+  text-align: center;
 
   h1 {
     margin: 0 0 8px;
-    font-size: 22px;
+    font-size: 24px;
   }
 }
 
@@ -63,12 +82,13 @@
 }
 
 .almost-there-card {
-  border-color: var(--color-orange-text);
-  background: var(--color-orange-bg);
-  color: var(--color-orange-text);
+  border: 1.5px solid var(--color-accent);
+  background: var(--color-surface);
+  color: var(--color-text);
 
   h2 {
     margin-top: 0;
+    color: var(--color-text);
   }
 }
 
