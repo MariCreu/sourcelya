@@ -805,13 +805,37 @@ keeps happening, check the GitHub App's webhook delivery log on the
 `sourcelya` repo.
 
 **Still outstanding from this block**:
-- [ ] **Plan is Free, not Starter** — decided to stay on Free rather
-      than upgrade. Free sleeps after ~15 min of inactivity; the plan is
-      to compensate with an external ping every few minutes ("como en
-      otras partes") instead of paying for Starter. Mechanism not yet
-      defined — needs the user to confirm what that existing pattern is
-      (external uptime service, Render cron job, etc.) before building
-      anything.
+- [x] **Plan is Free, not Starter — deliberately, no keep-alive either.**
+      A keep-alive ping was considered (every 5 or 10 min, via GitHub
+      Actions or an external monitor) but rejected after checking real
+      Render account mechanics: `lunasypapel-web` and `sourcelya` are
+      both on the Free plan and **share the same account-wide 750
+      free-instance-hours/month pool**. Instance-hours are billed by
+      wall-clock uptime, not by ping frequency — any keep-alive frequent
+      enough to prevent the ~15-min sleep timeout keeps the instance
+      running ~730h/month regardless of interval. `lunasypapel-web`
+      already likely consumes most/all of that pool by itself if kept
+      awake; adding a second always-on free service risks exceeding the
+      shared quota and Render suspending a service mid-month — possibly
+      the one that's actually in production use. No MCP tool exists to
+      read the account's actual usage-to-date (`get_metrics` returned no
+      data for `lunasypapel-web`); the user should confirm current
+      consumption in the Render dashboard (Workspace Settings → Billing
+      → Usage) if concerned.
+      **Decision: leave Sourcelya on Free with no keep-alive.** Cold
+      starts (~30-50s on the first request after sleep) are an accepted
+      trade-off for a 2-5 company pilot. If a demo ever needs zero
+      latency, the clean fix is upgrading *only* Sourcelya to Starter
+      ($7/mo) — that removes it from the shared free pool entirely
+      without touching `lunasypapel-web`'s quota. Revisit if/when that
+      need comes up.
+- [ ] **`healthCheckPath` is empty on both `sourcelya` and
+      `lunasypapel-web`** (confirmed via `get_service`). No tool in this
+      Render MCP sets it (only `create_web_service`/
+      `update_environment_variables`); needs the dashboard — Settings →
+      Health Checks → Health Check Path → `/api/health` for Sourcelya.
+      Render uses this during deploys to avoid routing traffic to a new
+      instance before it's actually ready.
 - [ ] **Rotate the database password.** It was pasted into this chat
       twice while debugging the connection string above — treat it as
       compromised regardless of channel privacy. This requires the user
