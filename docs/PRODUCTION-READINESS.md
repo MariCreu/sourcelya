@@ -926,22 +926,45 @@ manual dashboard instruction, never a direct API call):
    config — a fresh commit (forcing a new webhook-triggered build) was
    used instead to pick up the corrected branch/root-directory settings.
 
-**Still outstanding from this block** (all manual — see chat for the
-exact click-by-click):
-- [ ] Cloudflare Pages project #1: `web/` → `sourcelya.com` + `www.`
-      (in progress — debugging wrangler/root-directory/branch config)
-- [ ] Cloudflare Pages project #2: `frontend/` → `app.sourcelya.com`
-      (not started yet — same wrangler.jsonc fix pre-applied)
-- [ ] DNS: root + `www` + `app` records in Cloudflare
+**Resolution**: the "root directory not found" turned out to be the real
+blocker across retries — fixed by fast-forwarding `main` to the feature
+branch (`git push origin claude/packproof-saas-mvp-acqbew:main`, a clean
+fast-forward since `main`'s one commit was already an ancestor), so the
+Production branch actually has `frontend/`/`web/` on it. One more issue
+surfaced after that: the app project's build succeeded but `wrangler
+deploy` rejected `frontend/public/_redirects` with "Infinite loop
+detected" — it and `wrangler.jsonc`'s `assets.not_found_handling:
+single-page-application` were both trying to do SPA fallback and
+collided. Removed `_redirects` (the wrangler.jsonc setting is the
+correct, native mechanism for Workers Assets) and it deployed cleanly.
+
+Separately, confirmed via `workers_list` (a Cloudflare MCP connected
+mid-session, scoped to Workers/D1/KV/R2/Hyperdrive + docs search only —
+no Pages-project-creation, custom-domain, or DNS/Zone tools exist in it)
+that the user had been reusing **one** Worker (`sourcelya`) for both the
+landing and the app by toggling Root Directory back and forth, instead
+of two separate projects. Confirmed now fixed: `workers_list` shows two
+distinct Workers, `sourcelya` (landing, last touched 2026-09-15) and
+`sourcelya-app` (created + deployed clean 2026-09-16T11:56-11:58).
+
+**Still outstanding from this block** (all manual — no Cloudflare tool
+exists for custom domains or DNS):
+- [x] Cloudflare Worker/project #1: `web/` → `sourcelya` (landing)
+- [x] Cloudflare Worker/project #2: `frontend/` → `sourcelya-app`
+- [ ] Custom domain on the `sourcelya` worker: `sourcelya.com` + `www.`
+- [ ] Custom domain on the `sourcelya-app` worker: `app.sourcelya.com`
+- [ ] DNS records for the above (Cloudflare auto-offers these once a
+      custom domain is added on a Worker it also hosts DNS for)
 - [ ] `api.sourcelya.com` CNAME → the existing Render service
+      (`sourcelya.onrender.com`) + add that hostname in Render's Custom
+      Domains settings
 - [ ] Supabase anon key → fill into `environment.production.ts` and
       redeploy
 - [ ] Update `FRONTEND_BASE_URL` in Render to `https://app.sourcelya.com`
       once the app subdomain resolves (I can do this part once the user
       confirms the domain is live)
-- [ ] Decide the real production branch (`main` is empty; everything is
-      currently deployed from the feature branch) — separate from this
-      block, previously flagged, still open
+- [x] Decide the real production branch — resolved: `main` now carries
+      the real codebase (fast-forwarded from the feature branch)
 
 ## Next block
 
