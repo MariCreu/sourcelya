@@ -955,9 +955,18 @@ exists for custom domains or DNS):
 - [ ] Custom domain on the `sourcelya-app` worker: `app.sourcelya.com`
 - [ ] DNS records for the above (Cloudflare auto-offers these once a
       custom domain is added on a Worker it also hosts DNS for)
-- [ ] `api.sourcelya.com` CNAME → the existing Render service
-      (`sourcelya.onrender.com`) + add that hostname in Render's Custom
-      Domains settings
+- [x] `api.sourcelya.com` CNAME → Render, verified (2026-09-16). Hit
+      Render's standard "unable to verify" error first — root cause: the
+      Cloudflare CNAME was Proxied (orange cloud), so public DNS
+      resolved to Cloudflare's edge IPs instead of the real
+      `sourcelya.onrender.com` target, and Render's verification/ACME
+      certificate issuance couldn't see past that. Fixed by switching
+      the record to **DNS only** (grey cloud) — Render verified
+      immediately after. Can re-enable the orange-cloud proxy later if
+      Cloudflare's WAF/cache is wanted in front of the API; not required
+      for it to work. Not yet confirmed reachable end-to-end (this
+      sandbox's egress proxy blocks arbitrary domains, including this
+      one) — waiting on the user to confirm `/api/health` in a browser.
 - [ ] Supabase anon key → fill into `environment.production.ts` and
       redeploy
 - [ ] Update `FRONTEND_BASE_URL` in Render to `https://app.sourcelya.com`
