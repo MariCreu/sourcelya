@@ -1065,9 +1065,14 @@ this sandbox). Added a `_reset_rate_limits` autouse fixture to
 request counts would accumulate across the whole suite and eventually
 trip the real limits on unrelated tests.
 
-Not yet deployed to Render — next step is pushing this and watching the
-deploy log to confirm it boots clean in real production, matching the
-local `ENVIRONMENT=production` dry run above.
+**Deployed and confirmed live** (2026-09-16, `dep-dalchrp42hec73c0om30`).
+Render's auto-deploy webhook didn't fire again (same known flakiness —
+`trigger_deploy` used manually), but the deploy itself was clean: real
+production logs show exactly the dry run's predicted shape —
+`sourcelya_api_starting`, the same 2 expected warnings
+(`RESEND_API_KEY`/`DOCUMENT_EXTRACTION_PROVIDER=stub`), then
+"Application startup complete" and Render's "Your service is live 🎉" —
+no crash, no unexpected errors. This block is closed.
 
 ## Next block
 
