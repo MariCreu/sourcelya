@@ -951,10 +951,27 @@ distinct Workers, `sourcelya` (landing, last touched 2026-09-15) and
 exists for custom domains or DNS):
 - [x] Cloudflare Worker/project #1: `web/` → `sourcelya` (landing)
 - [x] Cloudflare Worker/project #2: `frontend/` → `sourcelya-app`
-- [ ] Custom domain on the `sourcelya` worker: `sourcelya.com` + `www.`
-- [ ] Custom domain on the `sourcelya-app` worker: `app.sourcelya.com`
-- [ ] DNS records for the above (Cloudflare auto-offers these once a
-      custom domain is added on a Worker it also hosts DNS for)
+- [x] Custom domain on the `sourcelya` worker: `sourcelya.com` (worked
+      immediately) + `www.` (see below — needed extra work)
+- [x] Custom domain on the `sourcelya-app` worker: `app.sourcelya.com`
+- [x] DNS: `sourcelya.com` and `app.sourcelya.com` got their DNS record
+      automatically when added as Custom Domains on their Workers (shows
+      up as record type "Worker" in the zone's DNS tab, not a plain
+      CNAME/A). `www.sourcelya.com` did not — adding it as a Custom
+      Domain on the `sourcelya` Worker created the routing entry but
+      never created a backing DNS record (confirmed: the zone's DNS tab
+      only listed 2 records, and Cloudflare's own dashboard flagged
+      "Visitors cannot reach www.sourcelya.com"). Removed that Custom
+      Domain entry and took the approach the plan already called for
+      (`www` → 301 redirect to apex, not a second copy of the Worker):
+      added a plain `www` CNAME (target `sourcelya.com`, proxied) plus a
+      **Redirect Rule** (Rules → Redirect Rules: hostname equals
+      `www.sourcelya.com` → dynamic redirect to
+      `concat("https://sourcelya.com", http.request.uri.path)`, 301,
+      preserve query string). The CNAME alone was not enough — Cloudflare
+      proxies the request but nothing served it without an explicit
+      Worker route or Redirect Rule bound to that literal hostname.
+      Confirmed working in a real browser after this.
 - [x] `api.sourcelya.com` CNAME → Render, verified (2026-09-16). Hit
       Render's standard "unable to verify" error first — root cause: the
       Cloudflare CNAME was Proxied (orange cloud), so public DNS
