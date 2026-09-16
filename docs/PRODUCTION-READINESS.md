@@ -984,13 +984,27 @@ exists for custom domains or DNS):
       for it to work. Confirmed reachable end-to-end: user checked
       `https://api.sourcelya.com/api/health` in a real browser, returns
       ok (2026-09-16).
-- [ ] Supabase anon key → fill into `environment.production.ts` and
-      redeploy
-- [ ] Update `FRONTEND_BASE_URL` in Render to `https://app.sourcelya.com`
-      once the app subdomain resolves (I can do this part once the user
-      confirms the domain is live)
+- [x] Supabase publishable (anon) key filled into
+      `environment.production.ts`. First attempt: the user pasted the
+      `sb_secret_...` key (the same one already used for
+      `SUPABASE_SERVICE_ROLE_KEY`) — caught before it shipped, since
+      putting a secret/service_role key in frontend code would expose
+      full admin DB access to anyone reading the JS bundle. Corrected to
+      the `sb_publishable_...` key, which is what's meant to ship
+      client-side.
+- [x] `FRONTEND_BASE_URL` updated in Render to `https://app.sourcelya.com`
+- [x] Cloudflare's auto-deploy on push didn't fire for the anon-key
+      commit (same webhook flakiness already seen on Render) — fixed by
+      manually triggering **New deployment** on `sourcelya-app`; deployed
+      clean.
 - [x] Decide the real production branch — resolved: `main` now carries
       the real codebase (fast-forwarded from the feature branch)
+
+**Full signup flow confirmed working end-to-end in real production**
+(2026-09-16): user signed up on `app.sourcelya.com`, Supabase Auth
+accepted the request and sent a real confirmation email. This closes the
+Cloudflare block — landing, app, and API are all live on their real
+domains, backed by the real Supabase project.
 
 ## Next block
 
