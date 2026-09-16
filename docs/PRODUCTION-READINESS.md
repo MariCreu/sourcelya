@@ -1074,6 +1074,128 @@ production logs show exactly the dry run's predicted shape —
 "Application startup complete" and Render's "Your service is live 🎉" —
 no crash, no unexpected errors. This block is closed.
 
-## Next block
+## "What's missing to start selling" — audit and code-side work
 
-Email (Resend) or the Anthropic API key — whichever the user picks next.
+The user asked what's left before charging real pilot companies. Split
+into real blockers (hard requirements before a paying customer touches
+this) vs. important-but-not-launch-blocking. Real blockers:
+
+1. Rotate the exposed DB password — user action, still pending.
+2. Real document extraction (`ANTHROPIC_API_KEY`) — the product's core
+   feature is currently off (`stub` mode). Needs the user's key.
+3. Real email delivery (Resend) — needs an account + domain verification
+   (DNS) + Supabase Auth SMTP config, all user-side.
+4. Malware scanning on supplier uploads.
+5. Privacy Policy / Terms of Service (GDPR, Spain-first market).
+6. Backups posture for the production database.
+
+Asked to do everything code-side now and produce a manual-steps list for
+tomorrow. Items 1–3 are entirely external-account actions (nothing to
+build); did the audit + real implementation work on 4–6:
+
+### 4. Malware scanning — implemented, not yet turned on
+
+Added a `MalwareScanner` port following this codebase's existing
+integration pattern (matches `StorageService`/`DocumentExtractionService`):
+`app/integrations/malware/{base,stub_scanner,clamav_scanner,factory}.py`.
+`StubMalwareScanner` (default, never flags anything) keeps local dev/tests
+working with no daemon; `ClamAVMalwareScanner` scans in-memory via
+clamd's INSTREAM protocol (`clamd` package) — no temp file ever touches
+disk. Wired into `DocumentService.upload_for_request` (the single choke
+point — the authenticated `documents.py` router only downloads/retries,
+never uploads) via an injected `scanner` param, and into the public
+upload endpoint via a new `get_malware_scanner` FastAPI dependency, so
+tests can inject a fake. A scan finding (`MalwareDetectedError`) → 400;
+the scanner being unreachable (`MalwareScanUnavailableError`) → 503 — it
+fails the upload closed, never lets an unscanned file through silently.
+`validate_production_config` now also warns (doesn't crash) on
+`MALWARE_SCAN_PROVIDER=stub` in production, same tier as the Resend/
+extraction warnings. 3 new tests (clean upload scanned, infected
+rejected, scanner-down fails closed) — full suite now 166 passed.
+
+**Deliberately not wired into the Dockerfile/deployed yet.** Running a
+real clamd daemon needs its own memory for the virus database and takes
+time to download definitions on boot — either as a second process in the
+same container (Dockerfile + `start.sh` changes, bigger image, longer
+boot) or a second Render service (extra cost). That's a real
+infra/cost tradeoff, not something to commit to production silently —
+flagged for the user to decide, see the checklist below.
+
+### 5. Privacy Policy / Terms of Service — drafted, needs real facts + legal review
+
+Added real, substantive (not placeholder-lorem) draft pages in both
+locales: `web/es/legal/{privacidad,terminos}/index.html`,
+`web/en/legal/{privacy,terms}/index.html`. Written as honest descriptions
+of what this codebase actually does (data collected, why, which
+sub-processors — Supabase/Resend/Anthropic/Render/Cloudflare — the fact
+this site sets no cookies, matching `analytics.js`'s real design) rather
+than generic legal boilerplate. Every fact I don't actually know (legal
+entity name, tax ID, registered address, DPO contact, exact Supabase
+project region, signed DPA status with each sub-processor, pilot pricing
+terms, dispute jurisdiction) is a visible `[BRACKETED PLACEHOLDER]`, and
+each page carries a visible "draft, pending legal review" notice — see
+`.legal-draft-notice` in `web/styles.css`. Linked from the main site's
+footer (both locales, via new `footer.privacyLink`/`footer.termsLink`
+content keys and `privacyUrl`/`termsUrl` computed per-locale in
+`build.js`). `noindex` on both (draft, not meant to rank yet). Verified
+in a real local browser (screenshot) — renders cleanly, footer links
+work. **Not legally valid until**: the bracketed facts are filled in and
+an actual lawyer reviews it — I'm not one.
+
+### 6. Backups — audited, one real gap found, one cost decision pending
+
+Looked this up in Supabase's real documentation (not from memory):
+confirmed the Pro plan already includes **daily automatic backups, 7-day
+retention, restorable via the dashboard, at no extra cost** — this is
+already true today, nothing to configure. Two things this doesn't cover:
+
+- **Database backups do not include Storage objects** — Supabase's own
+  docs are explicit that a backup only has *metadata* about files in a
+  bucket, not the file bytes themselves. That means **the actual supplier
+  documents (the core thing this product manages) are not covered by the
+  included daily backup** — only the DB rows pointing at them. This is a
+  real, currently-unmitigated gap, not yet resolved.
+- **Point-in-Time Recovery** (restore to any second, not just a daily
+  snapshot) exists as a paid add-on — $100/mo for 7-day PITR retention,
+  scaling to $400/mo for 28-day. Real recurring cost, so this is a
+  decision for the user, not something to turn on unilaterally.
+
+**Still open**: decide whether PITR is worth it yet (probably not for a
+2-5 company pilot — daily backups are likely enough for now), and design
+a real mitigation for the Storage-files gap (e.g. a periodic job copying
+the bucket to a second bucket/provider) — not built yet, flagged below.
+
+## Checklist for tomorrow (needs the user)
+
+**External accounts / dashboard actions** (nothing to build first, just
+do these, then hand me what's asked):
+- [ ] **Rotate the Supabase DB password** (Settings → Database → Reset
+      database password) — it was pasted in this chat twice. Give me the
+      new password and I'll update `DATABASE_URL` in Render.
+- [ ] **Anthropic API key** — create/find one in the Anthropic console,
+      give it to me along with which model to use (Sonnet 5 vs Opus 5 —
+      cost/quality tradeoff, not decided yet). I'll set
+      `ANTHROPIC_API_KEY` + `DOCUMENT_EXTRACTION_PROVIDER=anthropic` in
+      Render.
+- [ ] **Resend**: create an account, verify the `sourcelya.com` sending
+      domain (DNS records in Cloudflare — I'll give exact records once
+      you're at that step), then configure Supabase Auth's Custom SMTP
+      (Authentication → Emails → SMTP Settings) with Resend's SMTP
+      credentials so Supabase's own signup/reset emails also come from
+      `@sourcelya.com` instead of Supabase's generic sender. Give me the
+      `RESEND_API_KEY` and I'll set it in Render for the app's own emails
+      (reminders, supplier invites).
+
+**Decisions needed** (no external account, just a yes/no from you):
+- [ ] Turn on real malware scanning now (accept the bigger
+      image/longer boot / possible extra Render cost) or keep it as
+      code-ready-but-off a bit longer?
+- [ ] Fill in the real legal-entity facts in the Privacy/Terms drafts
+      (`[BRACKETED PLACEHOLDERS]`) and get them reviewed by an actual
+      lawyer before this goes in front of a real customer.
+- [ ] PITR for the database — pay $100+/mo now, or is the included daily
+      7-day backup enough for a 2-5 company pilot? (My take: daily is
+      probably enough for now — revisit if/when this scales.)
+- [ ] Decide a mitigation for the Storage-files-aren't-backed-up gap
+      (e.g. a scheduled job mirroring the bucket) — not built yet, needs
+      scoping once you're ready for it.

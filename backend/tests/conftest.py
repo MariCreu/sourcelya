@@ -14,14 +14,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.api.deps import get_db, get_email_service, get_extraction_service
+from app.api.deps import get_db, get_email_service, get_extraction_service, get_malware_scanner
 from app.core.config import get_settings
 from app.core.database import Base
 from app.core.rate_limit import limiter
 from app.core.security import get_token_verifier
 from app.main import app
 from app.services.email_service import EmailService
-from tests.fakes import FakeDocumentExtractionService, RecordingEmailSender
+from tests.fakes import FakeDocumentExtractionService, FakeMalwareScanner, RecordingEmailSender
 
 get_settings.cache_clear()
 get_token_verifier.cache_clear()
@@ -139,3 +139,18 @@ def fake_extraction_service():
         yield service
     finally:
         del app.dependency_overrides[get_extraction_service]
+
+
+@pytest.fixture
+def fake_malware_scanner():
+    """Overrides the malware-scan dependency — clean by default; set
+    `.error` on the returned fake (see tests/fakes.py's
+    infected_file_error()/scanner_unavailable_error()) to exercise the
+    rejected-upload paths without a real ClamAV daemon.
+    """
+    scanner = FakeMalwareScanner()
+    app.dependency_overrides[get_malware_scanner] = lambda: scanner
+    try:
+        yield scanner
+    finally:
+        del app.dependency_overrides[get_malware_scanner]

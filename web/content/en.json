@@ -87,6 +87,8 @@
     "cta": "Check my first supplier free"
   },
   "footer": {
-    "loginLink": "Log in to your account"
+    "loginLink": "Log in to your account",
+    "privacyLink": "Privacy",
+    "termsLink": "Terms of service"
   }
 }

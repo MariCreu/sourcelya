@@ -3,9 +3,16 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_db, get_email_service, get_extraction_service, get_storage_service
+from app.api.deps import (
+    get_db,
+    get_email_service,
+    get_extraction_service,
+    get_malware_scanner,
+    get_storage_service,
+)
 from app.core.rate_limit import limiter
 from app.integrations.extraction.base import DocumentExtractionService
+from app.integrations.malware.base import MalwareDetectedError, MalwareScanner, MalwareScanUnavailableError
 from app.integrations.storage.base import StorageService
 from app.repositories.company_repository import CompanyRepository
 from app.repositories.supplier_document_repository import SupplierDocumentRepository
@@ -114,6 +121,7 @@ async def upload_public_document(
     file: UploadFile,
     db: Session = Depends(get_db),
     storage: StorageService = Depends(get_storage_service),
+    scanner: MalwareScanner = Depends(get_malware_scanner),
     extractor: DocumentExtractionService = Depends(get_extraction_service),
 ) -> PublicComplianceRequestRead:
     try:
@@ -128,7 +136,7 @@ async def upload_public_document(
         content=content,
     )
     try:
-        document = DocumentService(db, storage).upload_for_request(request, upload)
+        document = DocumentService(db, storage, scanner=scanner).upload_for_request(request, upload)
     except RequestNotEditableError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except UnsupportedFileTypeError as exc:
@@ -136,6 +144,13 @@ async def upload_public_document(
     except FileTooLargeError as exc:
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
+        ) from exc
+    except MalwareDetectedError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except MalwareScanUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Could not scan this file right now — please try again shortly.",
         ) from exc
 
     # Synchronous, inline extraction — see ExtractionService's module

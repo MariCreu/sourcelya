@@ -4,6 +4,7 @@ from app.integrations.extraction.base import (
     DocumentExtractionService,
     ExtractionError,
 )
+from app.integrations.malware.base import MalwareDetectedError, MalwareScanUnavailableError
 
 
 class RecordingEmailSender(EmailSender):
@@ -54,3 +55,27 @@ class FakeDocumentExtractionService(DocumentExtractionService):
             duration_ms=0,
             estimated_cost_usd=0.0,
         )
+
+
+class FakeMalwareScanner:
+    """Test double for `MalwareScanner` — lets a test force "infected" or
+    "scanner unavailable" without a real ClamAV daemon. Clean by default,
+    matching `StubMalwareScanner`'s real-world default.
+    """
+
+    def __init__(self, error: Exception | None = None):
+        self.error = error
+        self.calls: list[bytes] = []
+
+    def scan(self, *, content: bytes) -> None:
+        self.calls.append(content)
+        if self.error is not None:
+            raise self.error
+
+
+def infected_file_error() -> MalwareDetectedError:
+    return MalwareDetectedError("File flagged by ClamAV: Eicar-Test-Signature")
+
+
+def scanner_unavailable_error() -> MalwareScanUnavailableError:
+    return MalwareScanUnavailableError("ClamAV scan failed: connection refused")

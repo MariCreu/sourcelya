@@ -71,6 +71,8 @@ function buildPages() {
     data.ogLocale = OG_LOCALES[locale];
     data.appSignupUrl = APP_SIGNUP_URL;
     data.appLoginUrl = APP_LOGIN_URL;
+    data.privacyUrl = `/${locale}/legal/${locale === 'es' ? 'privacidad' : 'privacy'}/`;
+    data.termsUrl = `/${locale}/legal/${locale === 'es' ? 'terminos' : 'terms'}/`;
 
     const html = render(template, data);
     const outDir = path.join(ROOT, locale);

@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.domain.enums import AuditEventType, RequestStatus
+from app.integrations.malware.base import MalwareScanner
+from app.integrations.malware.factory import get_malware_scanner
 from app.integrations.storage.base import StorageService
 from app.models.compliance_request import ComplianceRequest
 from app.models.supplier_document import SupplierDocument
@@ -74,9 +76,16 @@ def _extension_of(filename: str) -> str:
 
 
 class DocumentService:
-    def __init__(self, db: Session, storage: StorageService, settings: Settings | None = None):
+    def __init__(
+        self,
+        db: Session,
+        storage: StorageService,
+        scanner: MalwareScanner | None = None,
+        settings: Settings | None = None,
+    ):
         self.db = db
         self.storage = storage
+        self.scanner = scanner or get_malware_scanner()
         self.repository = SupplierDocumentRepository(db)
         self.audit_service = AuditService(db)
         self.settings = settings or get_settings()
@@ -112,6 +121,7 @@ class DocumentService:
             raise RequestNotEditableError("This request has already been completed")
 
         canonical_content_type = self._validate(upload)
+        self.scanner.scan(content=upload.content)
         extension = _extension_of(upload.filename)
         document_id = uuid.uuid4()
         storage_path = (

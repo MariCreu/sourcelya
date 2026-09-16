@@ -87,6 +87,8 @@
     "cta": "Comprueba tu primer proveedor gratis"
   },
   "footer": {
-    "loginLink": "Inicia sesión en tu cuenta"
+    "loginLink": "Inicia sesión en tu cuenta",
+    "privacyLink": "Privacidad",
+    "termsLink": "Términos de servicio"
   }
 }

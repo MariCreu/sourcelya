@@ -63,6 +63,13 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 20
     allowed_upload_extensions: List[str] = ["pdf", "xlsx", "csv", "docx", "png", "jpg", "jpeg"]
 
+    # Malware scanning — "stub" (default) never flags anything; only real
+    # once MALWARE_SCAN_PROVIDER=clamav points at a reachable clamd. See
+    # app/integrations/malware/ and docs/PRODUCTION-READINESS.md.
+    malware_scan_provider: str = "stub"
+    clamav_host: str = "localhost"
+    clamav_port: int = 3310
+
     # Email
     resend_api_key: str = ""
     email_from_address: str = "Sourcelya <notifications@sourcelya.com>"

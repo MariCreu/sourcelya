@@ -9,6 +9,7 @@ from app.core.security import InvalidTokenError, SupabaseIdentity, decode_supaba
 from app.integrations.email.base import EmailSender
 from app.integrations.email.factory import get_email_sender
 from app.integrations.extraction.factory import get_extraction_service
+from app.integrations.malware.factory import get_malware_scanner
 from app.integrations.storage.factory import get_storage_service
 from app.models.company import Company
 from app.models.user import User

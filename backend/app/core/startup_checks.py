@@ -71,6 +71,13 @@ def validate_production_config(settings: Settings) -> None:
             "will never get extraction suggestions.",
         )
 
+    if settings.malware_scan_provider == "stub":
+        logger.warning(
+            "production_config_degraded",
+            detail="MALWARE_SCAN_PROVIDER=stub — uploaded files are never "
+            "actually scanned for malware.",
+        )
+
     if not settings.internal_jobs_secret:
         logger.warning(
             "production_config_degraded",
