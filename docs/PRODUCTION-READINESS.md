@@ -964,9 +964,9 @@ exists for custom domains or DNS):
       the record to **DNS only** (grey cloud) — Render verified
       immediately after. Can re-enable the orange-cloud proxy later if
       Cloudflare's WAF/cache is wanted in front of the API; not required
-      for it to work. Not yet confirmed reachable end-to-end (this
-      sandbox's egress proxy blocks arbitrary domains, including this
-      one) — waiting on the user to confirm `/api/health` in a browser.
+      for it to work. Confirmed reachable end-to-end: user checked
+      `https://api.sourcelya.com/api/health` in a real browser, returns
+      ok (2026-09-16).
 - [ ] Supabase anon key → fill into `environment.production.ts` and
       redeploy
 - [ ] Update `FRONTEND_BASE_URL` in Render to `https://app.sourcelya.com`
