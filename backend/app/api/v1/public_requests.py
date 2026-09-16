@@ -1,9 +1,10 @@
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_email_service, get_extraction_service, get_storage_service
+from app.core.rate_limit import limiter
 from app.integrations.extraction.base import DocumentExtractionService
 from app.integrations.storage.base import StorageService
 from app.repositories.company_repository import CompanyRepository
@@ -106,7 +107,9 @@ def submit_public_request(
 
 
 @router.post("/{token}/documents", response_model=PublicComplianceRequestRead)
+@limiter.limit("10/minute")
 async def upload_public_document(
+    request: Request,
     token: str,
     file: UploadFile,
     db: Session = Depends(get_db),

@@ -1006,6 +1006,69 @@ accepted the request and sent a real confirmation email. This closes the
 Cloudflare block — landing, app, and API are all live on their real
 domains, backed by the real Supabase project.
 
+## Hardening block (backend, code-only)
+
+Started while the user is between external-account steps (Resend needs an
+account signup + DNS verification the user has to do by hand — nothing
+here needed that, so this ran in parallel). Audited the backend first:
+
+- **CORS**: `allow_methods=["*"]`/`allow_headers=["*"]` reviewed — fine as
+  is, since `allow_origins` is a single concrete production origin (not
+  `"*"`), which is what actually gates browser enforcement. No change.
+- **Public, unauthenticated attack surface**: `public_requests.py`'s 5
+  endpoints (keyed by an unguessable 32-byte token, so not brute-forceable)
+  had no rate limiting at all. The upload endpoint in particular runs
+  extraction inline — a real per-call cost (Anthropic) once that's
+  configured, and unconditional storage writes even today.
+- **Silent production fallbacks**: `get_storage_service()` falls back to
+  `InMemoryStorageService` (documents lost on every restart) and
+  `get_email_sender()` falls back to `ConsoleEmailSender` (emails only
+  logged) whenever their respective config is missing — both silent, no
+  error, exactly the kind of thing the original brief called out as a
+  hard requirement to catch before launch.
+
+**Implemented**:
+1. **Rate limiting** (`slowapi`, in-memory — fine as long as this runs as
+   1 instance, see Render's `numInstances: 1`; would need a shared
+   backend like Redis if that ever changes): a 100/minute default across
+   the whole API via `SlowAPIMiddleware`, plus a stricter 10/minute limit
+   specifically on `POST /public/requests/{token}/documents`.
+2. **Security response headers** (`SecurityHeadersMiddleware`):
+   `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`,
+   `Permissions-Policy`, `Strict-Transport-Security`. No CSP — this is a
+   JSON API with no HTML templates; a CSP would belong on the frontend
+   instead if ever added.
+3. **Startup config validator** (`validate_production_config`, called
+   once at import time in `main.py`, no-op outside
+   `ENVIRONMENT=production`): **hard-fails** (crashes the process, so a
+   bad deploy is visibly broken in Render's logs instead of silently
+   degraded) on missing `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`
+   (→ in-memory storage / data loss), `FRONTEND_BASE_URL` still being the
+   localhost default (→ CORS breaks for every real user), and
+   `SUPABASE_JWT_STRATEGY=hs256` in production (security downgrade).
+   **Only warns** (logs, doesn't crash) on `RESEND_API_KEY` /
+   `DOCUMENT_EXTRACTION_PROVIDER=stub` / `INTERNAL_JOBS_SECRET` being
+   unset — those are genuinely not-yet-launched features right now, not
+   bugs, and hard-failing on them would have taken the live backend down
+   on the next deploy. Verified by hand (not just by reasoning about it):
+   ran the app locally with `ENVIRONMENT=production` and deliberately bad
+   config → confirmed it crashes with all 3 errors listed; ran it again
+   with the same values Render actually has today → confirmed it boots
+   clean with only the 2 expected warnings.
+
+Added `slowapi==0.1.9` to `requirements.txt`. Full test suite
+re-run after every change: **163 passed** (was 155 — 8 new tests covering
+the rate limit, the security headers, and every branch of the startup
+validator), 6 deselected (Postgres integration tests, same as always in
+this sandbox). Added a `_reset_rate_limits` autouse fixture to
+`conftest.py` — without it, every test shares one TestClient "IP", so
+request counts would accumulate across the whole suite and eventually
+trip the real limits on unrelated tests.
+
+Not yet deployed to Render — next step is pushing this and watching the
+deploy log to confirm it boots clean in real production, matching the
+local `ENVIRONMENT=production` dry run above.
+
 ## Next block
 
 Email (Resend) or the Anthropic API key — whichever the user picks next.

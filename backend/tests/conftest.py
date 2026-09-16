@@ -17,6 +17,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.deps import get_db, get_email_service, get_extraction_service
 from app.core.config import get_settings
 from app.core.database import Base
+from app.core.rate_limit import limiter
 from app.core.security import get_token_verifier
 from app.main import app
 from app.services.email_service import EmailService
@@ -55,6 +56,17 @@ def _clean_database():
     Base.metadata.create_all(engine)
     yield
     Base.metadata.drop_all(engine)
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """Every test shares one TestClient "remote address", so without a
+    reset, request counts would accumulate across the whole test session
+    and eventually trip the real rate limits (see app/core/rate_limit.py)
+    on tests that have nothing to do with rate limiting.
+    """
+    limiter.reset()
+    yield
 
 
 @pytest.fixture
