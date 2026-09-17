@@ -1171,6 +1171,64 @@ already true today, nothing to configure. Two things this doesn't cover:
 a real mitigation for the Storage-files gap (e.g. a periodic job copying
 the bucket to a second bucket/provider) — not built yet, flagged below.
 
+## ClamAV: Docker/start.sh wiring done, tested as far as this sandbox allows
+
+The user asked what I could keep advancing solo while they handle the
+external-account items. Picked the one piece of "activate malware
+scanning" that doesn't need a decision first: making the actual
+activation a one-line env var flip instead of a code change.
+
+**Changed**: `backend/Dockerfile` now installs `clamav-daemon`/
+`clamav-freshclam` unconditionally (so the image always has them ready)
+and appends `TCPSocket 3310`/`TCPAddr 127.0.0.1` to `clamd.conf` (its
+default is a Unix socket only; `ClamAVMalwareScanner` talks TCP).
+`backend/start.sh` now runs `freshclam && clamd` in the background, but
+**only** when `MALWARE_SCAN_PROVIDER=clamav` is actually set — a
+complete no-op otherwise, so today's stub-mode deployment is unaffected.
+Runs in the background rather than blocking startup because clamd
+refuses to start at all before freshclam finishes downloading the virus
+database (confirmed directly, see below) — the app must not block its
+own boot on that; uploads attempted before clamd is ready just get the
+already-implemented 503 fail-closed response.
+
+**What I actually verified vs. couldn't, and why**: no Docker daemon
+exists in this sandbox (confirmed earlier this session, same limitation
+that blocked local Postgres integration tests), so I couldn't build/boot
+the real container image here. What I *could* do: installed
+`clamav-daemon` directly in this sandbox's OS and confirmed two things
+for real, not just in theory —
+1. `clamd` unconditionally refuses to start without a loaded virus
+   database (`LibClamAV Error: cli_loaddbdir: No supported database
+   files found`) — confirms the freshclam-must-finish-first ordering in
+   `start.sh` is load-bearing, not just cautious.
+2. Ran the real `clamd` Python client (not a fake) against a genuinely
+   unreachable daemon and confirmed `ClamAVMalwareScanner.scan()`
+   correctly raises `MalwareScanUnavailableError` — the fail-closed path
+   works against the real library's real exception, not just the test
+   double.
+
+Could **not** verify actual malware detection against a real signature
+database: this sandbox's own egress proxy explicitly blocks
+`database.clamav.net` (confirmed: `connect_rejected`, organization
+policy, not a timeout) — no test I ran here can download real virus
+definitions. That, and the Docker build itself (whether
+`apt-get install clamav-daemon` succeeds on Render's actual build image,
+which does have normal internet access unlike this sandbox), can only be
+verified by actually deploying — which is exactly the "turn it on" step
+that's the user's decision, not mine to make unilaterally. Pushed the
+Dockerfile/start.sh change itself now regardless (see commit) since it's
+inert with `MALWARE_SCAN_PROVIDER` unset, and confirmed via Render's real
+deploy logs that the build succeeded and the service still boots exactly
+as before in stub mode — that much *is* now verified end to end.
+
+**Also worth flagging for whenever this gets turned on**: Render's
+filesystem isn't persistent across deploys/restarts, so `freshclam` would
+re-download the full virus database (~200-300MB) from scratch on every
+single boot — real time (adds to cold-start latency) and real load on
+ClamAV's mirrors on every restart/deploy. Not a blocker, just something
+to know going in; a persistent disk or a scheduled definitions-refresh
+job would be the next-level fix if this becomes a problem in practice.
+
 ## Checklist for tomorrow (needs the user)
 
 **External accounts / dashboard actions** (nothing to build first, just
@@ -1193,9 +1251,10 @@ do these, then hand me what's asked):
       (reminders, supplier invites).
 
 **Decisions needed** (no external account, just a yes/no from you):
-- [ ] Turn on real malware scanning now (accept the bigger
-      image/longer boot / possible extra Render cost) or keep it as
-      code-ready-but-off a bit longer?
+- [ ] Turn on real malware scanning now — as of this block, it's
+      genuinely just setting `MALWARE_SCAN_PROVIDER=clamav` in Render
+      (accept the longer boot / re-downloaded virus DB on every restart)
+      — or keep it off a bit longer?
 - [ ] Fill in the real legal-entity facts in the Privacy/Terms drafts
       (`[BRACKETED PLACEHOLDERS]`) and get them reviewed by an actual
       lawyer before this goes in front of a real customer.
