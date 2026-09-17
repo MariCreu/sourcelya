@@ -1121,6 +1121,12 @@ boot) or a second Render service (extra cost). That's a real
 infra/cost tradeoff, not something to commit to production silently —
 flagged for the user to decide, see the checklist below.
 
+Pushed and deployed clean (2026-09-17, `dep-dalrrg8ae00c73cdt3ug`) — real
+Render logs confirmed only the expected new warning
+(`MALWARE_SCAN_PROVIDER=stub`) alongside the pre-existing ones, no crash,
+service live. Still in stub mode as intended — no behavior change for
+real uploads yet.
+
 ### 5. Privacy Policy / Terms of Service — drafted, needs real facts + legal review
 
 Added real, substantive (not placeholder-lorem) draft pages in both
