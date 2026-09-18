@@ -1324,6 +1324,34 @@ tests).
 processes untrusted input (dev/CI-only), so the real-world risk is
 effectively nil. Deferred rather than rushed.
 
+## Backend container now runs as non-root — verified on a real deploy
+
+Asked the user first since, unlike everything else this phase, this
+needed a real deploy to verify (no Docker daemon in this sandbox — same
+limitation as the ClamAV wiring). Got the go-ahead.
+
+`backend/Dockerfile` now creates an unprivileged `appuser` and chowns
+`/app` to it; `backend/start.sh` still starts as root (it needs that for
+`alembic upgrade head` and, when `MALWARE_SCAN_PROVIDER=clamav`, starting
+`clamd`), but the final `exec` now runs `uvicorn` — the actual
+internet-facing process, parsing every request and every
+supplier-uploaded file — via `su -s /bin/sh appuser -c "..."`, so root
+never touches untrusted input. Also pointed the Dockerfile's own `CMD`
+at `./start.sh` (previously dead code, since Render's real "Docker
+Command" already overrode it to `./start.sh` — confirmed via the Render
+API before touching anything).
+
+**Verified for real**, not assumed: triggered a live deploy
+(`dep-damfpu942hec738umsk0`) and read the actual boot logs —
+`alembic.runtime.migration` ran, `Started server process`,
+`Application startup complete`, `Uvicorn running on
+http://0.0.0.0:8000`, Render's own `Your service is live 🎉`, and real
+proxied requests (`GET /`, `HEAD /`) getting a normal `404` back (proof
+the process is actually serving, not crash-looping) — zero `su`/
+permission/`useradd` errors anywhere in the log. `docker-compose.yml`'s
+local dev flow overrides the container command entirely and never
+touches `start.sh`, so local hot-reload dev is completely unaffected.
+
 ## Checklist for tomorrow (needs the user)
 
 **External accounts / dashboard actions** (nothing to build first, just
