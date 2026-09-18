@@ -1245,10 +1245,13 @@ same 166-test fast suite used locally, not the Postgres-only integration
 tests), `frontend-build` (Node 20, `npm ci` against the committed
 `frontend/package-lock.json`, `ng build`), and `web-build` (Node 20,
 `npm run build` — no install step, since `web/` is the zero-dependency
-generator and has no lockfile). Validated the YAML itself parses
-correctly; the actual commands (`pytest`, `ng build`, `node build.js`)
-have all been run and passed repeatedly by hand throughout this session,
-just not yet through Actions itself.
+generator and has no lockfile).
+
+Pushed and confirmed via the real GitHub Actions run (not just "the YAML
+parses"): all three jobs — `backend-tests`, `frontend-build`,
+`web-build` — completed with `conclusion: success` on GitHub's own
+runners, on both `main` and this branch (run IDs `35315764673`/
+`35315765657`). CI is live from this point on.
 
 ## Checklist for tomorrow (needs the user)
 
