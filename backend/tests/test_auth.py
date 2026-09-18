@@ -9,8 +9,11 @@ settings = get_settings()
 
 
 def test_me_requires_a_token(client):
+    # FastAPI's HTTPBearer returns 401 for a missing Authorization header
+    # (older versions returned 403; aligned to 401 to match every other
+    # "not authenticated" case in this file).
     response = client.get("/api/auth/me")
-    assert response.status_code == 403  # no Authorization header at all
+    assert response.status_code == 401
 
 
 def test_me_rejects_garbage_token(client):
@@ -33,7 +36,7 @@ def test_me_rejects_wrong_signing_secret(client):
             "aud": "authenticated",
             "exp": now + timedelta(hours=1),
         },
-        "some-other-secret",
+        "some-other-secret-also-at-least-32-bytes",
         algorithm="HS256",
     )
     response = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})

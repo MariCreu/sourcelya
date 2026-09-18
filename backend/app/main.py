@@ -9,7 +9,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.core.rate_limit import limiter
 from app.core.security_headers import SecurityHeadersMiddleware
-from app.core.startup_checks import validate_production_config
+from app.core.startup_checks import docs_urls_for_environment, validate_production_config
 
 settings = get_settings()
 configure_logging(debug=settings.debug)
@@ -17,7 +17,8 @@ logger = get_logger(__name__)
 logger.info("sourcelya_api_starting", environment=settings.environment)
 validate_production_config(settings)
 
-app = FastAPI(title=settings.app_name)
+docs_url, redoc_url, openapi_url = docs_urls_for_environment(settings.environment)
+app = FastAPI(title=settings.app_name, docs_url=docs_url, redoc_url=redoc_url, openapi_url=openapi_url)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

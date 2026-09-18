@@ -1,7 +1,11 @@
 import pytest
 
 from app.core.config import Settings
-from app.core.startup_checks import ProductionConfigError, validate_production_config
+from app.core.startup_checks import (
+    ProductionConfigError,
+    docs_urls_for_environment,
+    validate_production_config,
+)
 
 _VALID_PRODUCTION_OVERRIDES = dict(
     environment="production",
@@ -60,3 +64,12 @@ def test_passes_with_only_degraded_warnings(caplog):
         internal_jobs_secret="",
     )
     validate_production_config(settings)  # must not raise
+
+
+def test_docs_disabled_in_production():
+    assert docs_urls_for_environment("production") == (None, None, None)
+
+
+@pytest.mark.parametrize("environment", ["development", "test", "staging"])
+def test_docs_enabled_outside_production(environment):
+    assert docs_urls_for_environment(environment) == ("/docs", "/redoc", "/openapi.json")

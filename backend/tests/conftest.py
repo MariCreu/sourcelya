@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 os.environ.setdefault("SUPABASE_JWT_STRATEGY", "hs256")
-os.environ.setdefault("SUPABASE_JWT_SECRET", "test-secret")
+os.environ.setdefault("SUPABASE_JWT_SECRET", "test-secret-at-least-32-bytes-long")
 os.environ.setdefault("INTERNAL_JOBS_SECRET", "test-internal-secret")
 os.environ.setdefault("ENVIRONMENT", "test")
 

@@ -14,6 +14,19 @@ class ProductionConfigError(RuntimeError):
     """
 
 
+def docs_urls_for_environment(environment: str) -> tuple[str | None, str | None, str | None]:
+    """(docs_url, redoc_url, openapi_url) for `FastAPI(...)`.
+
+    Interactive docs reveal the full schema — every field, every internal
+    endpoint — to anyone who finds the URL. Fine for local/dev; not for a
+    production API handling suppliers' compliance documents. Returns all
+    three as None (FastAPI's own way of disabling them) outside dev/test.
+    """
+    if environment == "production":
+        return None, None, None
+    return "/docs", "/redoc", "/openapi.json"
+
+
 def validate_production_config(settings: Settings) -> None:
     """Fails loud on production misconfigurations that would otherwise
     degrade silently, and warns (without crashing) on the ones that are

@@ -1290,6 +1290,40 @@ are already wired in `app/main.py` from earlier hardening; no `.env`
 file is tracked in git on either backend or root, and `.gitignore`
 covers it.
 
+## Docs exposure + dependency CVE patching, another solo-side item
+
+**Interactive API docs disabled in production.** `/docs`, `/redoc`, and
+`/openapi.json` exposed the full API schema — every field, every
+internal endpoint — to anyone who found the URL. Added
+`docs_urls_for_environment()` in `app/core/startup_checks.py`
+(unit-tested) and wired it into `app/main.py`: all three are `None`
+(FastAPI's own way of disabling them) when `environment == "production"`,
+unchanged everywhere else.
+
+**Patched known CVEs in pinned dependencies.** Ran `pip-audit` against
+`backend/requirements.txt` — it flagged real, fixed vulnerabilities in
+`pypdf` (parses supplier-uploaded PDFs — the most attacker-reachable
+dependency in the stack), `starlette` (transitive via `fastapi`), `pyjwt`
+(our own auth-token verification), and `python-multipart` (upload
+parsing). Bumped `fastapi` 0.115.0→0.141.1 (pulls in a patched
+`starlette` automatically), `pypdf` 5.0.1→6.19.0, `pyjwt` 2.9.0→2.13.0,
+`python-multipart` 0.0.9→0.0.31. Verified in an isolated venv before
+touching the real one: full 170-test suite green, `ruff check` clean.
+One expected behavior change surfaced and was fixed properly, not
+papered over — newer FastAPI's `HTTPBearer` returns 401 (not 403) for a
+missing Authorization header, now consistent with every other
+"not authenticated" case in `test_auth.py`. Also fixed an
+`InsecureKeyLengthWarning` the newer `pyjwt` now emits — the test
+suite's dev-only HMAC secret was under 32 bytes; lengthened it (never a
+production secret, only used for the local `hs256` JWT strategy in
+tests).
+
+**Left alone, on purpose:** `pytest` 8.3.3 has a known CVE (fix in
+9.0.3), but bumping it conflicts with the pinned `pytest-asyncio`
+0.24.0 and would need its own compatibility pass — and `pytest` never
+processes untrusted input (dev/CI-only), so the real-world risk is
+effectively nil. Deferred rather than rushed.
+
 ## Checklist for tomorrow (needs the user)
 
 **External accounts / dashboard actions** (nothing to build first, just
