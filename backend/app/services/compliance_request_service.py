@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.security import generate_secure_token, hash_token
 from app.domain.enums import AuditEventType, RequestStatus
+from app.integrations.email.templates import ComplianceRequestEmailContext
 from app.models.company import Company
 from app.models.compliance_request import ComplianceRequest, ComplianceRequestProduct
 from app.repositories.compliance_request_repository import ComplianceRequestRepository
@@ -14,7 +15,6 @@ from app.repositories.supplier_repository import SupplierRepository
 from app.schemas.compliance_request import ComplianceRequestCreate
 from app.services.audit_service import AuditService
 from app.services.email_service import EmailService
-from app.integrations.email.templates import ComplianceRequestEmailContext
 
 
 class SupplierNotFoundError(Exception):

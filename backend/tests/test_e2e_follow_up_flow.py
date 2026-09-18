@@ -238,7 +238,7 @@ def test_conflict_blocks_complete_until_resolved(client, auth_header, fake_extra
     _onboard(client, headers)
     supplier = _create_supplier(client, headers)
     product = _create_product(client, headers, supplier["id"])
-    component = _create_component(
+    _create_component(
         client,
         headers,
         product["id"],

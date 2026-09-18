@@ -1253,6 +1253,30 @@ parses"): all three jobs — `backend-tests`, `frontend-build`,
 runners, on both `main` and this branch (run IDs `35315764673`/
 `35315765657`). CI is live from this point on.
 
+## Backend lint — ruff, another solo-side item
+
+Added `backend/ruff.toml` (`select = ["E", "F", "W", "I", "B", "UP"]`,
+`line-length = 120`, `B008` ignored because `Depends(...)` as an argument
+default is FastAPI's own documented dependency-injection pattern, not a
+bug) and a `backend-lint` job in CI that runs `ruff check app tests` on
+every push/PR alongside `backend-tests`.
+
+Running `ruff check --fix` first surfaced one real bug it introduced:
+its unused-import detection (F401) can't tell a genuinely unused import
+from a deliberate re-export, and it silently deleted three lines from
+`app/api/deps.py` (`get_extraction_service`, `get_malware_scanner`,
+`get_storage_service`) that `app/api/v1/documents.py` and
+`app/api/v1/public_requests.py` depend on via
+`from app.api.deps import ...` — that would have been an `ImportError`
+at startup. Caught before committing, restored with
+`# noqa: F401 re-exported` comments so ruff won't strip them again. Also
+fixed one real finding by hand (`F405` — a name used via a star-import
+that ruff couldn't resolve, in `tests/test_extraction_service.py`, fixed
+with an explicit import rather than a suppression) and removed two
+genuinely dead variable assignments in test helpers (`F841`). Full
+166-test suite still green after every change; `ruff check app tests`
+is clean.
+
 ## Checklist for tomorrow (needs the user)
 
 **External accounts / dashboard actions** (nothing to build first, just

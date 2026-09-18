@@ -2,9 +2,7 @@ import uuid
 
 import pytest
 
-from app.domain.enums import RequestStatus
 from app.integrations.extraction.base import DocumentExtractionResult, ExtractedFieldSuggestion
-from app.models.compliance_request import ComplianceRequest
 from app.models.supplier_document import SupplierDocument
 from app.repositories.company_repository import CompanyRepository
 from app.repositories.compliance_request_repository import ComplianceRequestRepository

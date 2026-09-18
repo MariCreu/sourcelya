@@ -1,5 +1,5 @@
 from functools import lru_cache
-from typing import List, Literal
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     supabase_jwt_strategy: Literal["jwks", "hs256"] = "jwks"
     supabase_jwks_url: str = ""  # override; defaults to f"{supabase_url}/auth/v1/.well-known/jwks.json"
     supabase_issuer: str = ""  # override; defaults to f"{supabase_url}/auth/v1"
-    supabase_jwt_allowed_algorithms: List[str] = ["ES256", "RS256"]
+    supabase_jwt_allowed_algorithms: list[str] = ["ES256", "RS256"]
     supabase_jwt_secret: str = "dev-secret-change-me"  # only used when strategy == "hs256"
 
     supplier_token_bytes: int = 32
@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     internal_jobs_secret: str = ""
 
     # Reminders (centralized, never hardcode elsewhere)
-    reminder_schedule_days: List[int] = [3, 7, 14]
+    reminder_schedule_days: list[int] = [3, 7, 14]
 
     # FASE 6: cap on *automatic* follow-up rounds — manual follow-up (a
     # human clicking the button) is never capped, since a person is already
@@ -61,7 +61,7 @@ class Settings(BaseSettings):
 
     # Uploads
     max_upload_size_mb: int = 20
-    allowed_upload_extensions: List[str] = ["pdf", "xlsx", "csv", "docx", "png", "jpg", "jpeg"]
+    allowed_upload_extensions: list[str] = ["pdf", "xlsx", "csv", "docx", "png", "jpg", "jpeg"]
 
     # Malware scanning — "stub" (default) never flags anything; only real
     # once MALWARE_SCAN_PROVIDER=clamav points at a reachable clamd. See

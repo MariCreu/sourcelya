@@ -1,0 +1,12 @@
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+# B008: FastAPI's dependency-injection pattern is `Depends(...)` as an
+# argument default — that's the framework's documented API, not a bug.
+ignore = ["B008"]
+
+[lint.per-file-ignores]
+# SYSTEM_PROMPT is a long natural-language string, not code — wrapping it
+# to satisfy line-length would fight its own wording, not improve it.
+"app/integrations/extraction/claude_extraction.py" = ["E501"]

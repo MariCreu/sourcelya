@@ -28,7 +28,7 @@ def _send_request(client, headers, supplier, product):
         json={"supplier_id": supplier["id"], "product_ids": [product["id"]], "language": "es"},
         headers=headers,
     ).json()
-    sent = client.post(f"/api/requests/{request['id']}/send", headers=headers).json()
+    client.post(f"/api/requests/{request['id']}/send", headers=headers)
     return request
 
 

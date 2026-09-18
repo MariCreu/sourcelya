@@ -2,7 +2,6 @@ from app.integrations.email.base import EmailMessage, EmailSender
 from app.integrations.extraction.base import (
     DocumentExtractionResult,
     DocumentExtractionService,
-    ExtractionError,
 )
 from app.integrations.malware.base import MalwareDetectedError, MalwareScanUnavailableError
 

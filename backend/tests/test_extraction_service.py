@@ -18,6 +18,7 @@ from app.models.compliance_request import ComplianceRequest, ComplianceRequestPr
 from app.models.extracted_field import ExtractedField
 from app.models.packaging_component import PackagingComponent
 from app.models.product import Product
+from app.models.supplier_document import SupplierDocument
 from app.services.extraction_service import ExtractionService
 from tests.fakes import FakeDocumentExtractionService
 
