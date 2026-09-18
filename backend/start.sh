@@ -13,4 +13,7 @@ if [ "$MALWARE_SCAN_PROVIDER" = "clamav" ]; then
   (freshclam --quiet && clamd --config-file=/etc/clamav/clamd.conf) &
 fi
 
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+# Drop root before running the actual web server — the setup above
+# (migrations, optionally starting clamd) is the only reason this
+# process starts as root at all. See the Dockerfile for the user.
+exec su -s /bin/sh appuser -c "uvicorn app.main:app --host 0.0.0.0 --port 8000"

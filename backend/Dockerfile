@@ -21,6 +21,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# The container starts as root (start.sh needs it to run migrations and,
+# when MALWARE_SCAN_PROVIDER=clamav, start clamd) but the actual
+# internet-facing process — uvicorn, parsing every request and every
+# supplier-uploaded file — drops to this unprivileged user before exec
+# (see the last line of start.sh). Standard privilege-drop pattern: root
+# only does setup, the process handling untrusted input never has it.
+RUN useradd --create-home --shell /usr/sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./start.sh"]
