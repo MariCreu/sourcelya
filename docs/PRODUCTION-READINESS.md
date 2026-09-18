@@ -1229,6 +1229,27 @@ ClamAV's mirrors on every restart/deploy. Not a blocker, just something
 to know going in; a persistent disk or a scheduled definitions-refresh
 job would be the next-level fix if this becomes a problem in practice.
 
+## CI/CD — GitHub Actions, another solo-side item
+
+Kept advancing what doesn't need the user while they handle the external
+accounts. This one closes a real gap flagged earlier: nothing ran the
+test suite automatically before code reached `main`/production — every
+verification this whole phase has been me running `pytest`/`ng build`/
+`node build.js` by hand before pushing.
+
+Added `.github/workflows/ci.yml`: three parallel jobs on every push to
+`main`/this branch and every PR into `main` — `backend-tests` (Python
+3.11, `pip install -r backend/requirements.txt`, `pytest -q` — picks up
+`pytest.ini`'s existing `-m "not integration"` default, so it runs the
+same 166-test fast suite used locally, not the Postgres-only integration
+tests), `frontend-build` (Node 20, `npm ci` against the committed
+`frontend/package-lock.json`, `ng build`), and `web-build` (Node 20,
+`npm run build` — no install step, since `web/` is the zero-dependency
+generator and has no lockfile). Validated the YAML itself parses
+correctly; the actual commands (`pytest`, `ng build`, `node build.js`)
+have all been run and passed repeatedly by hand throughout this session,
+just not yet through Actions itself.
+
 ## Checklist for tomorrow (needs the user)
 
 **External accounts / dashboard actions** (nothing to build first, just
