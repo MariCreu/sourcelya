@@ -1277,6 +1277,19 @@ genuinely dead variable assignments in test helpers (`F841`). Full
 166-test suite still green after every change; `ruff check app tests`
 is clean.
 
+## Dependabot — automated dependency updates, another solo-side item
+
+Added `.github/dependabot.yml`: weekly PRs for `backend` (pip),
+`frontend` (npm), and the GitHub Actions workflow's own action
+versions. No dependency-update cadence existed before this — a known
+CVE in a pinned package would otherwise only get patched when someone
+happened to bump the version by hand. Also checked (no changes
+needed): CORS is already scoped to the single configured frontend
+origin, not a wildcard; security-headers middleware and rate limiting
+are already wired in `app/main.py` from earlier hardening; no `.env`
+file is tracked in git on either backend or root, and `.gitignore`
+covers it.
+
 ## Checklist for tomorrow (needs the user)
 
 **External accounts / dashboard actions** (nothing to build first, just
